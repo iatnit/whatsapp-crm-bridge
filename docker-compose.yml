@@ -1,0 +1,16 @@
+services:
+  whatsapp-crm:
+    build: .
+    container_name: whatsapp-crm-bridge
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data   # persist SQLite + media across restarts
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
