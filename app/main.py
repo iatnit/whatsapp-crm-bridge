@@ -30,7 +30,9 @@ async def scheduled_daily_analysis():
     logger.info("Scheduled daily analysis triggered")
     try:
         summary = await run_daily_pipeline()
-        report = generate_daily_report(summary)
+        from app.store.conversations import get_unmatched_conversations
+        unmatched = await get_unmatched_conversations()
+        report = generate_daily_report(summary, unmatched=unmatched)
         logger.info("Daily report:\n%s", report)
     except Exception:
         logger.exception("Daily analysis failed")
@@ -83,7 +85,9 @@ async def health():
 async def manual_trigger():
     """Manually trigger the daily analysis pipeline (for testing)."""
     summary = await run_daily_pipeline()
-    report = generate_daily_report(summary)
+    from app.store.conversations import get_unmatched_conversations
+    unmatched = await get_unmatched_conversations()
+    report = generate_daily_report(summary, unmatched=unmatched)
     return {"summary": summary, "report": report}
 
 
@@ -113,3 +117,22 @@ async def stats():
         "total_conversations": total_conversations,
         "matched_conversations": matched,
     }
+
+
+@app.post("/api/v1/send")
+async def send_message(payload: dict):
+    """Send a WhatsApp message and record it in the database.
+
+    Body: {"to": "919876543210", "text": "Hello!"}
+    """
+    from app.webhook.sender import send_text_message
+
+    to = payload.get("to", "")
+    text = payload.get("text", "")
+    if not to or not text:
+        return {"error": "Missing 'to' or 'text'"}
+
+    wa_id = await send_text_message(to, text)
+    if wa_id:
+        return {"status": "sent", "message_id": wa_id}
+    return {"status": "failed"}

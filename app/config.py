@@ -5,11 +5,20 @@ from pathlib import Path
 
 
 class Settings(BaseSettings):
-    # --- Meta / WhatsApp ---
-    meta_verify_token: str = ""
-    meta_app_secret: str = ""
-    whatsapp_access_token: str = ""
-    whatsapp_phone_number_id: str = ""
+    # --- WATI ---
+    wati_api_endpoint: str = ""   # e.g. https://live-mt-server.wati.io
+    wati_tenant_id: str = ""      # tenant ID for V1 API paths
+    wati_api_token: str = ""      # Bearer token from WATI dashboard
+
+    @property
+    def wati_v1_url(self) -> str:
+        """V1 API base: {endpoint}/{tenant_id}"""
+        return f"{self.wati_api_endpoint.rstrip('/')}/{self.wati_tenant_id}"
+
+    @property
+    def wati_v3_url(self) -> str:
+        """V3 API base: {endpoint}"""
+        return self.wati_api_endpoint.rstrip("/")
 
     # --- LLM ---
     anthropic_api_key: str = ""

@@ -89,13 +89,13 @@ async def _call_gemini(user_prompt: str) -> dict | None:
 
 
 async def _call_anthropic(user_prompt: str) -> dict | None:
-    """Call Anthropic Claude API."""
+    """Call Anthropic Claude API (async)."""
     import anthropic
 
-    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+    client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
 
     try:
-        response = client.messages.create(
+        response = await client.messages.create(
             model="claude-sonnet-4-20250514",
             max_tokens=2048,
             system=SYSTEM_PROMPT,
