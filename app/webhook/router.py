@@ -8,7 +8,7 @@ from fastapi import APIRouter, Request
 
 from app.webhook.media import download_media
 from app.store.messages import save_message, update_conversation
-from app.autoreply.responder import handle_auto_reply
+from app.autoreply.responder import handle_auto_reply, notify_outbound
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1")
@@ -106,6 +106,10 @@ async def receive_webhook(request: Request):
             msg_type,
             content[:80],
         )
+
+        # Track human outbound → pause AI auto-reply
+        if direction == "outbound":
+            notify_outbound(phone)
 
         # Trigger AI auto-reply for inbound messages
         if direction == "inbound" and msg_type not in ("reaction", "sticker"):

@@ -18,6 +18,8 @@ logger = logging.getLogger(__name__)
 # In-memory rate limiting state
 _last_reply_ts: dict[str, float] = {}  # phone → last reply timestamp
 _hourly_counts: dict[str, list[float]] = defaultdict(list)  # phone → list of reply timestamps
+_ai_sent_ts: dict[str, float] = {}  # phone → timestamp when AI last sent (to distinguish from human)
+_human_takeover: dict[str, float] = {}  # phone → timestamp when human took over
 
 
 def _check_cooldown(phone: str) -> bool:
@@ -35,11 +37,42 @@ def _check_hourly_limit(phone: str) -> bool:
     return len(_hourly_counts[phone]) >= settings.auto_reply_max_per_hour
 
 
+def _check_human_takeover(phone: str) -> bool:
+    """Return True if a human has taken over this conversation recently."""
+    takeover_ts = _human_takeover.get(phone, 0)
+    if takeover_ts == 0:
+        return False
+    elapsed = time.time() - takeover_ts
+    if elapsed < settings.auto_reply_human_pause:
+        return True
+    # Expired, clean up
+    _human_takeover.pop(phone, None)
+    return False
+
+
+def notify_outbound(phone: str) -> None:
+    """Called by webhook router when an outbound message is received.
+
+    If the outbound message was NOT sent by our AI (i.e. it's from a human
+    or WATI KnowBot manual reply), activate human takeover pause.
+    """
+    now = time.time()
+    ai_sent = _ai_sent_ts.get(phone, 0)
+    # If AI sent to this phone within the last 15 seconds, this outbound
+    # is likely the echo of our own AI message → ignore
+    if (now - ai_sent) < 15:
+        return
+    # Otherwise, a human or external system sent this → pause AI
+    _human_takeover[phone] = now
+    logger.info("Human takeover detected for %s, AI paused for %ds", phone, settings.auto_reply_human_pause)
+
+
 def _record_reply(phone: str) -> None:
     """Record that we sent a reply."""
     now = time.time()
     _last_reply_ts[phone] = now
     _hourly_counts[phone].append(now)
+    _ai_sent_ts[phone] = now
 
 
 def _format_conversation(messages: list[dict]) -> str:
@@ -132,6 +165,11 @@ async def handle_auto_reply(
 
     # Skip non-text-like messages that don't need replies
     if msg_type in ("reaction", "sticker"):
+        return
+
+    # Human takeover check — if a human replied recently, AI stays silent
+    if _check_human_takeover(phone):
+        logger.info("Human takeover active for %s, AI auto-reply paused", phone)
         return
 
     # Rate limiting checks
