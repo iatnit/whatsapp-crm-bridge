@@ -88,8 +88,8 @@ def _format_conversation(messages: list[dict]) -> str:
     return "\n".join(lines)
 
 
-async def _has_recent_outbound(phone: str) -> bool:
-    """Check if there's a very recent outbound message (e.g. from KnowBot)."""
+async def _has_recent_outbound(phone: str, window: int = 10) -> bool:
+    """Check if there's a recent outbound message within `window` seconds."""
     messages = await get_messages_by_phone(phone, limit=3)
     if not messages:
         return False
@@ -97,8 +97,7 @@ async def _has_recent_outbound(phone: str) -> bool:
     latest = messages[0]
     if latest["direction"] == "outbound":
         age = time.time() - latest["timestamp"]
-        # If there's an outbound message within the last 10 seconds, KnowBot likely replied
-        if age < 10:
+        if age < window:
             return True
     return False
 
@@ -165,6 +164,20 @@ async def handle_auto_reply(
 
     # Skip non-text-like messages that don't need replies
     if msg_type in ("reaction", "sticker"):
+        return
+
+    # For media messages (image/video/audio/document), delay 10 minutes
+    # to let Lucky reply first; if no human reply, send a brief acknowledgment
+    if msg_type in ("image", "video", "audio", "document", "voice"):
+        await asyncio.sleep(600)  # wait 10 minutes
+        if await _has_recent_outbound(phone, window=600):
+            logger.info("Human already replied to media from %s, skipping", phone)
+            return
+        # No human reply after 10 min — send brief acknowledgment
+        msg_id = await send_text_message(phone, "let me check this, one moment 👍")
+        if msg_id:
+            _record_reply(phone)
+            logger.info("Auto-acknowledged media from %s after 10min", phone)
         return
 
     # Human takeover check — if a human replied recently, AI stays silent
