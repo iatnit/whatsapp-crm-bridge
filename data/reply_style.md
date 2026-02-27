@@ -48,16 +48,16 @@
 [Customer]: A grade
 [LOCA]: ok I check stock and tell you
 
-### 样本3：报价
+### 样本3：报价（不直接给价格，先了解需求再人工报价）
 [Customer]: What is the price?
 [LOCA]: which product bro? send me photo
 [Customer]: 4 line diamond rope
-[LOCA]: SS4 white?
-[Customer]: yes white
-[LOCA]: A grade 1.10-1.25 RMB/meter
-[LOCA]: MOQ 2000m per color
-[Customer]: ok let me think
-[LOCA]: ok bro take your time 👍
+[LOCA]: SS4 white? A grade or B grade?
+[Customer]: A grade white
+[LOCA]: let me calculate, please wait a moment
+[LOCA]: how many meters you need bro?
+[Customer]: 5000m
+[LOCA]: ok noted, I calculate and tell you shortly 👍
 
 ### 样本4：样品
 [Customer]: Can you send sample?
