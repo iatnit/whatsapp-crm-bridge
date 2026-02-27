@@ -171,6 +171,7 @@ async def create_customer(
     contact: str = "",
     location: str = "",
     source: str = "WhatsApp",
+    contact_person: str = "",
 ) -> str | None:
     """Create a new customer in 客户管理CRM.
 
@@ -178,7 +179,11 @@ async def create_customer(
     """
     fields: dict = {"客户": name}
     if contact:
-        fields["联系电话"] = contact
+        # Format phone: add "+" prefix for international numbers
+        phone_str = contact if contact.startswith("+") else f"+{contact}"
+        fields["联系电话"] = phone_str
+    if contact_person:
+        fields["联系人"] = contact_person
     if location:
         fields["国家地区"] = location
     if source:
@@ -203,7 +208,8 @@ def clear_customer_cache():
 
 
 async def ensure_customer(
-    name: str, phone: str = "", location: str = ""
+    name: str, phone: str = "", location: str = "",
+    contact_person: str = "",
 ) -> str | None:
     """Search for a customer; create if not found. Returns record_id.
 
@@ -226,7 +232,10 @@ async def ensure_customer(
             return record_id
 
         logger.info("Customer '%s' not found, creating new record", name)
-        record_id = await create_customer(name, contact=phone, location=location)
+        record_id = await create_customer(
+            name, contact=phone, location=location,
+            contact_person=contact_person,
+        )
         if record_id:
             _customer_cache[cache_key] = record_id
         return record_id

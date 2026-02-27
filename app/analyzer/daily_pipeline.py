@@ -85,7 +85,10 @@ async def run_daily_pipeline() -> dict:
             location = analysis.get("customer_info", {}).get("location", "")
 
             # Ensure customer exists in Feishu CRM
-            record_id = await ensure_customer(feishu_name, phone=phone, location=location)
+            record_id = await ensure_customer(
+                feishu_name, phone=phone, location=location,
+                contact_person=display_name,
+            )
             if not record_id:
                 errors.append(f"Failed to create/find Feishu customer for {feishu_name}")
                 continue
