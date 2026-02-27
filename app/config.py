@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     auto_reply_max_per_hour: int = 10      # max replies per customer per hour
     auto_reply_context_messages: int = 20  # recent messages loaded as context
     auto_reply_max_tokens: int = 500       # max output tokens per reply
-    auto_reply_delay: int = 5              # seconds to wait before replying (anti-dup with KnowBot)
+    auto_reply_delay: int = 15             # seconds to wait before replying (give Lucky time to respond)
     auto_reply_human_pause: int = 1800     # seconds to pause AI after human replies (default 30min)
     knowledge_base_path: str = "data/knowledge_base.md"
 

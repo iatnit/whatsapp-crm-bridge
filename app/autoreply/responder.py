@@ -225,17 +225,21 @@ async def handle_auto_reply(
             logger.debug("Auto-reply hourly limit reached for %s, skipping", phone)
             return
 
-        # Delay to let KnowBot respond first (anti-duplicate)
+        # Delay to let Lucky or KnowBot respond first
         await asyncio.sleep(settings.auto_reply_delay)
 
-        # Re-check cooldown after delay (another task may have sent during sleep)
+        # Re-check ALL conditions after delay
+        if _check_human_takeover(phone):
+            logger.info("Human takeover detected after delay for %s, skipping", phone)
+            return
+
         if _check_cooldown(phone):
             logger.debug("Auto-reply cooldown active after delay for %s, skipping", phone)
             return
 
-        # Check if KnowBot already replied during our delay
-        if await _has_recent_outbound(phone):
-            logger.info("KnowBot already replied to %s, skipping auto-reply", phone)
+        # Check if anyone already replied during our delay (wider window)
+        if await _has_recent_outbound(phone, window=settings.auto_reply_delay + 10):
+            logger.info("Outbound detected during delay for %s, skipping auto-reply", phone)
             return
 
         # Load conversation context
@@ -266,6 +270,14 @@ async def handle_auto_reply(
         # Check for duplicate content — don't send same message twice
         if _is_duplicate_reply(phone, reply_text):
             logger.info("Duplicate reply detected for %s, skipping: %s", phone, reply_text[:60])
+            return
+
+        # FINAL CHECK before sending — human may have replied during LLM call
+        if _check_human_takeover(phone):
+            logger.info("Human takeover detected before send for %s, discarding reply", phone)
+            return
+        if await _has_recent_outbound(phone, window=30):
+            logger.info("Outbound detected before send for %s, discarding reply", phone)
             return
 
         # Send reply via WATI
