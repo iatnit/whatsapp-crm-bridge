@@ -20,6 +20,8 @@ _last_reply_ts: dict[str, float] = {}  # phone → last reply timestamp
 _hourly_counts: dict[str, list[float]] = defaultdict(list)  # phone → list of reply timestamps
 _ai_sent_ts: dict[str, float] = {}  # phone → timestamp when AI last sent (to distinguish from human)
 _human_takeover: dict[str, float] = {}  # phone → timestamp when human took over
+_phone_locks: dict[str, asyncio.Lock] = {}  # phone → lock (prevent concurrent replies)
+_last_reply_text: dict[str, str] = {}  # phone → last reply text (prevent duplicate content)
 
 
 def _check_cooldown(phone: str) -> bool:
@@ -145,6 +147,27 @@ async def _call_gemini(system_prompt: str, user_prompt: str) -> str | None:
         return None
 
 
+def _get_phone_lock(phone: str) -> asyncio.Lock:
+    """Get or create a per-phone lock to prevent concurrent replies."""
+    if phone not in _phone_locks:
+        _phone_locks[phone] = asyncio.Lock()
+    return _phone_locks[phone]
+
+
+def _is_duplicate_reply(phone: str, text: str) -> bool:
+    """Check if the reply text is the same as the last one sent to this phone."""
+    last = _last_reply_text.get(phone, "")
+    if not last:
+        return False
+    # Exact match or very similar (one is substring of the other)
+    if text == last:
+        return True
+    shorter, longer = (text, last) if len(text) < len(last) else (last, text)
+    if len(shorter) > 10 and shorter in longer:
+        return True
+    return False
+
+
 async def handle_auto_reply(
     phone: str,
     display_name: str,
@@ -154,6 +177,7 @@ async def handle_auto_reply(
     """Main entry point: decide whether to reply and send AI response.
 
     Called as a background task from the webhook handler.
+    Uses per-phone lock to prevent concurrent duplicate replies.
     """
     if not settings.auto_reply_enabled:
         return
@@ -180,57 +204,75 @@ async def handle_auto_reply(
             logger.info("Auto-acknowledged media from %s after 10min", phone)
         return
 
-    # Human takeover check — if a human replied recently, AI stays silent
-    if _check_human_takeover(phone):
-        logger.info("Human takeover active for %s, AI auto-reply paused", phone)
+    # Acquire per-phone lock — only one reply task at a time per customer
+    lock = _get_phone_lock(phone)
+    if lock.locked():
+        logger.debug("Auto-reply already in progress for %s, skipping", phone)
         return
 
-    # Rate limiting checks
-    if _check_cooldown(phone):
-        logger.debug("Auto-reply cooldown active for %s, skipping", phone)
-        return
+    async with lock:
+        # Human takeover check — if a human replied recently, AI stays silent
+        if _check_human_takeover(phone):
+            logger.info("Human takeover active for %s, AI auto-reply paused", phone)
+            return
 
-    if _check_hourly_limit(phone):
-        logger.debug("Auto-reply hourly limit reached for %s, skipping", phone)
-        return
+        # Rate limiting checks
+        if _check_cooldown(phone):
+            logger.debug("Auto-reply cooldown active for %s, skipping", phone)
+            return
 
-    # Delay to let KnowBot respond first (anti-duplicate)
-    await asyncio.sleep(settings.auto_reply_delay)
+        if _check_hourly_limit(phone):
+            logger.debug("Auto-reply hourly limit reached for %s, skipping", phone)
+            return
 
-    # Check if KnowBot already replied during our delay
-    if await _has_recent_outbound(phone):
-        logger.info("KnowBot already replied to %s, skipping auto-reply", phone)
-        return
+        # Delay to let KnowBot respond first (anti-duplicate)
+        await asyncio.sleep(settings.auto_reply_delay)
 
-    # Load conversation context
-    messages = await get_messages_by_phone(
-        phone, limit=settings.auto_reply_context_messages
-    )
-    conversation_text = _format_conversation(messages)
+        # Re-check cooldown after delay (another task may have sent during sleep)
+        if _check_cooldown(phone):
+            logger.debug("Auto-reply cooldown active after delay for %s, skipping", phone)
+            return
 
-    # Build prompts
-    knowledge = get_knowledge_text()
-    reply_style = get_reply_style()
-    system_prompt = SYSTEM_PROMPT_TEMPLATE.format(
-        knowledge_base=knowledge, reply_style=reply_style
-    )
-    customer_name = display_name or phone
-    user_prompt = USER_PROMPT_TEMPLATE.format(
-        customer_name=customer_name,
-        phone=phone,
-        conversation_text=conversation_text,
-    )
+        # Check if KnowBot already replied during our delay
+        if await _has_recent_outbound(phone):
+            logger.info("KnowBot already replied to %s, skipping auto-reply", phone)
+            return
 
-    # Call LLM
-    reply_text = await _call_gemini(system_prompt, user_prompt)
-    if not reply_text:
-        logger.warning("No reply generated for %s", phone)
-        return
+        # Load conversation context
+        messages = await get_messages_by_phone(
+            phone, limit=settings.auto_reply_context_messages
+        )
+        conversation_text = _format_conversation(messages)
 
-    # Send reply via WATI
-    msg_id = await send_text_message(phone, reply_text)
-    if msg_id:
-        _record_reply(phone)
-        logger.info("Auto-replied to %s: %s", phone, reply_text[:80])
-    else:
-        logger.error("Failed to send auto-reply to %s", phone)
+        # Build prompts
+        knowledge = get_knowledge_text()
+        reply_style = get_reply_style()
+        system_prompt = SYSTEM_PROMPT_TEMPLATE.format(
+            knowledge_base=knowledge, reply_style=reply_style
+        )
+        customer_name = display_name or phone
+        user_prompt = USER_PROMPT_TEMPLATE.format(
+            customer_name=customer_name,
+            phone=phone,
+            conversation_text=conversation_text,
+        )
+
+        # Call LLM
+        reply_text = await _call_gemini(system_prompt, user_prompt)
+        if not reply_text:
+            logger.warning("No reply generated for %s", phone)
+            return
+
+        # Check for duplicate content — don't send same message twice
+        if _is_duplicate_reply(phone, reply_text):
+            logger.info("Duplicate reply detected for %s, skipping: %s", phone, reply_text[:60])
+            return
+
+        # Send reply via WATI
+        msg_id = await send_text_message(phone, reply_text)
+        if msg_id:
+            _record_reply(phone)
+            _last_reply_text[phone] = reply_text
+            logger.info("Auto-replied to %s: %s", phone, reply_text[:80])
+        else:
+            logger.error("Failed to send auto-reply to %s", phone)
