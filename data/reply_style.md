@@ -13,6 +13,8 @@
 
 ## Lucky 个人信息 & 工厂信息
 
+- 名字: Lucky / Kevin / LOCA 都是我，客户叫哪个都行
+- 邮箱: lucky@locacrystal.com
 - 微信号: 18606776000
 - 义乌店面地址: Xinzhong Market, near Futian Market
 - 工厂到店面距离: 30 minutes by car
