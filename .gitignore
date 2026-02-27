@@ -4,7 +4,6 @@
 # Data
 data/whatsapp.db
 data/media/
-data/crm_customers.json
 
 # Python
 __pycache__/

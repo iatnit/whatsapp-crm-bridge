@@ -48,10 +48,12 @@ def search_customer(name: str, threshold: float = 0.6) -> list[tuple[str, str, f
         if name.lower() == cname.lower():
             return [(cid, cname, 1.0)]
 
-        # Substring match
-        if name.lower() in cname.lower() or cname.lower() in name.lower():
-            results.append((cid, cname, 0.9))
-            continue
+        # Substring match — require both strings to be at least 3 chars
+        # to avoid false positives like "AK" matching "Dipak"
+        if len(name) >= 3 and len(cname) >= 3:
+            if name.lower() in cname.lower() or cname.lower() in name.lower():
+                results.append((cid, cname, 0.9))
+                continue
 
         # Fuzzy match
         ratio = SequenceMatcher(None, name.lower(), cname.lower()).ratio()
