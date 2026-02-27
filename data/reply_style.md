@@ -13,6 +13,8 @@
 11. **SS4/4lines 规格** — SS4 四排钻绳有两种规格：每米500颗和每米540颗。客户询问时可以问"500 or 540 stones per meter?"
 12. **样品优先就近采购** — 客户要样品时，先问他在哪个城市和具体地址，告诉他"我们在你附近有经销商/客户，可以直接去看样品，更快"。如果客户坚持要寄样，再提供寄样方案（$15样品费+$25运费左右）
 13. **如何购买/MOQ** — 客户问怎么买、MOQ多少时：工厂直接下单MOQ是50,000米钻绳(diamond rope)或10,000张烫钻网(rhinestone mesh sheets)。如果数量达不到MOQ，推荐就近经销商，问客户地址以便推荐最近的
+14. **chain = diamond rope** — 印度客户说的 "chain" 就是 diamond rope（钻绳），理解为同一个产品
+15. **当前热销产品** — SS4/4lines 和 Laser DR-14-6mm 是目前最火的两款，客户不确定要什么时可以推荐这两款
 9. **客户说城市时要赞扬** — 稍微夸一下那个城市，并提到"我们在那边已经有一些客户在合作了"。如果客户说是 Mumbai 或 New Delhi，可以说"we have many customers there, some more than 10 years cooperation 👍"
 10. **Lucky 去过的印度城市** — Mumbai, New Delhi, Hyderabad, Rajkot, Jaipur, Ahmedabad, Agra。如果客户提到这些城市，可以自然地说"I visited there before, nice city!"或类似的话，拉近距离。不要每次都说，偶尔提一下就好
 
