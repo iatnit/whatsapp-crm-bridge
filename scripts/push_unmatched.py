@@ -1,15 +1,14 @@
 """Push unmatched WhatsApp customers to Feishu '未匹配客户表'.
 
-Usage (inside Docker):
-    python3 scripts/push_unmatched.py
-
-Usage (standalone):
-    pip install httpx
-    python3 scripts/push_unmatched.py
+Usage (via docker run):
+    cd /opt/whatsapp-crm-bridge
+    docker run --rm -v ./data:/app/data -v ./scripts:/app/scripts -w /app \
+        whatsapp-crm-bridge-whatsapp-crm python3 scripts/push_unmatched.py
 """
 
 import sqlite3
 import sys
+from datetime import datetime
 
 import httpx
 
@@ -37,24 +36,53 @@ def get_token():
 
 def find_table(token):
     headers = {"Authorization": f"Bearer {token}"}
-    r = httpx.get(
-        f"{BASE}/bitable/v1/apps/{APP_TOKEN}/tables",
-        headers=headers,
-        timeout=15,
-    )
-    tables = r.json().get("data", {}).get("items", [])
     table_id = None
-    for t in tables:
-        name = t["name"]
-        tid = t["table_id"]
-        print(f"  {tid} | {name}")
-        if "未匹配" in name:
-            table_id = tid
+    page_token = None
+
+    while True:
+        params = {"page_size": 100}
+        if page_token:
+            params["page_token"] = page_token
+        r = httpx.get(
+            f"{BASE}/bitable/v1/apps/{APP_TOKEN}/tables",
+            headers=headers,
+            params=params,
+            timeout=15,
+        )
+        data = r.json().get("data", {})
+        tables = data.get("items", [])
+        for t in tables:
+            name = t["name"]
+            tid = t["table_id"]
+            print(f"  {tid} | {name}")
+            if "未匹配" in name:
+                table_id = tid
+
+        if not data.get("has_more"):
+            break
+        page_token = data.get("page_token")
+
     if not table_id:
         print("ERROR: 未找到 '未匹配客户表', 请先在飞书多维表格中创建")
+        print("Tip: 确保飞书应用有该表的访问权限")
         sys.exit(1)
     print(f"Target table: {table_id}")
     return table_id
+
+
+def get_fields(token, table_id):
+    """List fields in the target table to help debug column name issues."""
+    headers = {"Authorization": f"Bearer {token}"}
+    r = httpx.get(
+        f"{BASE}/bitable/v1/apps/{APP_TOKEN}/tables/{table_id}/fields",
+        headers=headers,
+        timeout=15,
+    )
+    fields = r.json().get("data", {}).get("items", [])
+    print(f"\nTable fields:")
+    for f in fields:
+        print(f"  {f['field_name']} (type={f['type']})")
+    return [f["field_name"] for f in fields]
 
 
 def get_unmatched():
@@ -66,23 +94,36 @@ def get_unmatched():
         "ORDER BY message_count DESC"
     ).fetchall()
     db.close()
-    print(f"Unmatched customers: {len(rows)}")
+    print(f"\nUnmatched customers: {len(rows)}")
     return rows
 
 
-def push_to_feishu(token, table_id, rows):
+def push_to_feishu(token, table_id, rows, field_names):
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
     }
+    today = datetime.now().strftime("%Y-%m-%d")
     ok = 0
     fail = 0
+
     for phone, name, count in rows:
-        fields = {
-            "客户名称": name or phone,
-            "电话号码": str(phone),
-            "消息数量": count or 0,
-        }
+        # Try to match field names flexibly
+        fields = {}
+        for fn in field_names:
+            fn_lower = fn.lower()
+            if "客户" in fn or "名称" in fn or "name" in fn_lower:
+                fields[fn] = name or phone
+            elif "电话" in fn or "phone" in fn_lower:
+                fields[fn] = str(phone)
+            elif "日期" in fn or "date" in fn_lower:
+                fields[fn] = today
+            elif "消息" in fn or "数量" in fn or "count" in fn_lower:
+                fields[fn] = count or 0
+
+        if not fields:
+            fields = {"新客户名称": name or phone, "电话": str(phone), "日期": today}
+
         r = httpx.post(
             f"{BASE}/bitable/v1/apps/{APP_TOKEN}/tables/{table_id}/records",
             json={"fields": fields},
@@ -96,6 +137,7 @@ def push_to_feishu(token, table_id, rows):
             fail += 1
             msg = r.json().get("msg", "unknown")
             print(f"  FAIL: {name} ({phone}) - {msg}")
+
     print(f"\nDone: {ok} success, {fail} failed, {len(rows)} total")
 
 
@@ -103,11 +145,12 @@ def main():
     print("=== Push Unmatched Customers to Feishu ===\n")
     token = get_token()
     table_id = find_table(token)
+    field_names = get_fields(token, table_id)
     rows = get_unmatched()
     if not rows:
         print("No unmatched customers found!")
         return
-    push_to_feishu(token, table_id, rows)
+    push_to_feishu(token, table_id, rows, field_names)
 
 
 if __name__ == "__main__":
