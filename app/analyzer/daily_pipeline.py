@@ -9,7 +9,7 @@ from app.store.messages import get_unprocessed_messages, mark_processed
 from app.store.conversations import get_all_conversations
 from app.matcher.customer_matcher import match_all_unmatched, load_customers
 from app.analyzer.claude_analyzer import analyze_conversation
-from app.writers.feishu_writer import ensure_customer, create_followup
+from app.writers.feishu_writer import ensure_customer, ensure_followup, clear_customer_cache
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +27,9 @@ async def run_daily_pipeline() -> dict:
     Returns a summary dict for the daily report.
     """
     logger.info("=== Daily pipeline started ===")
+
+    # Clear customer cache to ensure fresh lookups each run
+    clear_customer_cache()
 
     # Step 1: Refresh customer DB and match unmatched conversations
     load_customers()
@@ -86,9 +89,10 @@ async def run_daily_pipeline() -> dict:
                 errors.append(f"Failed to create/find Feishu customer for {feishu_name}")
                 continue
 
-            # Create follow-up record
-            followup_id = await create_followup(
+            # Create or update follow-up record (max 1 per customer per day)
+            followup_id = await ensure_followup(
                 customer_record_id=record_id,
+                customer_name=feishu_name,
                 title=analysis.get("followup_title", "WhatsApp沟通"),
                 detail=analysis.get("followup_detail", ""),
                 summary=analysis.get("summary", ""),
