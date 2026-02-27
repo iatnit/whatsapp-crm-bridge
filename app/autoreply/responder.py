@@ -10,7 +10,7 @@ import httpx
 from app.config import settings
 from app.store.messages import get_messages_by_phone
 from app.webhook.sender import send_text_message
-from app.autoreply.knowledge import get_knowledge_text
+from app.autoreply.knowledge import get_knowledge_text, get_reply_style
 from app.autoreply.prompts import SYSTEM_PROMPT_TEMPLATE, USER_PROMPT_TEMPLATE
 
 logger = logging.getLogger(__name__)
@@ -197,7 +197,10 @@ async def handle_auto_reply(
 
     # Build prompts
     knowledge = get_knowledge_text()
-    system_prompt = SYSTEM_PROMPT_TEMPLATE.format(knowledge_base=knowledge)
+    reply_style = get_reply_style()
+    system_prompt = SYSTEM_PROMPT_TEMPLATE.format(
+        knowledge_base=knowledge, reply_style=reply_style
+    )
     customer_name = display_name or phone
     user_prompt = USER_PROMPT_TEMPLATE.format(
         customer_name=customer_name,
