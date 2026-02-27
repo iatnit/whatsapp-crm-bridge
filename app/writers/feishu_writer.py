@@ -192,10 +192,14 @@ async def create_customer(
 _customer_lock = asyncio.Lock()
 _customer_cache: dict[str, str] = {}  # lowercase name → record_id
 
+# Dedup cache for ensure_followup (key: "name|YYYY-MM-DD" → record_id)
+_followup_cache: dict[str, str] = {}
+
 
 def clear_customer_cache():
-    """Clear the in-memory customer cache. Call at pipeline start."""
+    """Clear the in-memory customer and followup caches. Call at pipeline start."""
     _customer_cache.clear()
+    _followup_cache.clear()
 
 
 async def ensure_customer(
@@ -301,7 +305,28 @@ async def ensure_followup(
 
     If a followup already exists for this customer today, appends to it.
     Otherwise creates a new record.
+    Uses both in-memory cache and Feishu search for dedup.
     """
+    cst = timezone(timedelta(hours=8))
+    today_str = datetime.now(cst).strftime("%Y-%m-%d")
+    cache_key = f"{customer_name.strip().lower()}|{today_str}"
+
+    # Check in-memory cache first
+    cached_record_id = _followup_cache.get(cache_key)
+    if cached_record_id:
+        # Already have a record today — update it
+        logger.info("Followup cache hit for %s, updating %s", customer_name, cached_record_id)
+        update_fields = {
+            "跟进内容": title,
+            "跟进情况": detail,
+            "总结": summary or "",
+        }
+        result = await _update_record(
+            settings.feishu_table_followup, cached_record_id, update_fields
+        )
+        return cached_record_id if result else None
+
+    # Cache miss — search Feishu
     existing = await search_today_followup(customer_name)
 
     if existing:
@@ -324,15 +349,19 @@ async def ensure_followup(
             settings.feishu_table_followup, record_id, update_fields
         )
         if result:
+            _followup_cache[cache_key] = record_id
             logger.info("Updated existing followup %s for %s", record_id, customer_name)
             return record_id
         return None
 
     # No existing record today — create new
-    return await create_followup(
+    record_id = await create_followup(
         customer_record_id=customer_record_id,
         title=title,
         detail=detail,
         summary=summary,
         method=method,
     )
+    if record_id:
+        _followup_cache[cache_key] = record_id
+    return record_id

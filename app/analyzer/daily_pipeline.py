@@ -77,9 +77,10 @@ async def run_daily_pipeline() -> dict:
         # Write to Feishu
         try:
             # Determine customer name for Feishu
-            feishu_name = customer_name
-            if analysis.get("customer_info", {}).get("name"):
-                feishu_name = analysis["customer_info"]["name"]
+            # Priority: matched CRM name > Claude analysis name > display_name > phone
+            matched_name = conv.get("customer_name", "")
+            claude_name = analysis.get("customer_info", {}).get("name", "")
+            feishu_name = matched_name or claude_name or display_name or phone
 
             location = analysis.get("customer_info", {}).get("location", "")
 
