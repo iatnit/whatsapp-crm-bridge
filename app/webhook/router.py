@@ -1,5 +1,6 @@
 """WATI webhook endpoint — receives all WhatsApp messages (inbound + outbound)."""
 
+import asyncio
 import logging
 from typing import Any
 
@@ -7,6 +8,7 @@ from fastapi import APIRouter, Request
 
 from app.webhook.media import download_media
 from app.store.messages import save_message, update_conversation
+from app.autoreply.responder import handle_auto_reply
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1")
@@ -104,5 +106,11 @@ async def receive_webhook(request: Request):
             msg_type,
             content[:80],
         )
+
+        # Trigger AI auto-reply for inbound messages
+        if direction == "inbound" and msg_type not in ("reaction", "sticker"):
+            asyncio.create_task(
+                handle_auto_reply(phone, display_name, content, msg_type)
+            )
 
     return {"status": "ok"}

@@ -34,6 +34,15 @@ class Settings(BaseSettings):
     feishu_table_customers: str = "tbl4kQe0MeodIGGD"
     feishu_table_followup: str = "tblcftbYX7E0cEUo"
 
+    # --- Auto Reply ---
+    auto_reply_enabled: bool = True
+    auto_reply_cooldown: int = 30          # seconds between replies to same customer
+    auto_reply_max_per_hour: int = 10      # max replies per customer per hour
+    auto_reply_context_messages: int = 20  # recent messages loaded as context
+    auto_reply_max_tokens: int = 500       # max output tokens per reply
+    auto_reply_delay: int = 5              # seconds to wait before replying (anti-dup with KnowBot)
+    knowledge_base_path: str = "data/knowledge_base.md"
+
     # --- App ---
     log_level: str = "INFO"
     daily_analysis_hour: int = 23
