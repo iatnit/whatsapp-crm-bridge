@@ -191,22 +191,26 @@ Rhinestone decoration patches designed specifically for footwear.
 
 ## Available Colors
 
-### Stone Colors
+### SS4/4lines & SS4/3lines Complete Color Chart (15 colors)
 
-| Color | Also called | Description | Popularity |
-|-------|------------|------------|------------|
-| **Crystal White** | Silver, Silver Diamond | Clear/transparent white stone | Most popular |
-| **LCT (Light Colorado Topaz)** | Antik, Antic | Golden yellow/amber | Very popular in India |
-| **Peach / Champagne** | | Warm pink-gold | Very popular |
-| **AB (Aurora Borealis)** | | Rainbow/iridescent effect | Premium, popular |
-| **Black Diamond (BD)** | Grey | Dark grey/transparent grey | Popular |
-| **Shadow / Golden Shadow (GS)** | Light Gold | Golden champagne tone | |
-| **Jonquil** | Gold | Light yellow | |
-| **Siam** | Red | Red | |
-| **Jet** | | Pure black | |
-| **WoodRose** | | Pink-mauve | |
-| **Pink** | | Pink | |
-| **Light Peach** | | Softer peach tone | Popular |
+| # | Color Name | Stone | Fabric | Also called |
+|---|-----------|-------|--------|------------|
+| 1 | **Silver** | White/Silver | White fabric | Crystal White, Silver Diamond |
+| 2 | **Sultan** | Peach | Peach fabric | Peach, Champagne |
+| 3 | **Grey** | BD (Black Diamond) | Grey fabric | |
+| 4 | **Antic** | LCT | LCT fabric | LCT, Antik |
+| 4b | **Antic (Tan)** | LCT | Tan fabric | LCT Tan |
+| 5 | **Wood Rose** | AB | Woodrose fabric | |
+| 6 | **White AB** | AB | White fabric | |
+| 7 | **Black/Silver** | White/Silver | Black fabric | |
+| 8 | **Golden** | Jonquil | Gold fabric | Gold |
+| 9 | **Cream AB** | AB | Cream fabric | |
+| 10 | **L-Golden** | Shadow/GS | Gold Cream fabric | Golden Shadow, Light Gold |
+| 11 | **Black** | Black/Jet | Black fabric | |
+| 12 | **Black AB** | AB | Black fabric | |
+| 13 | **Black/Gun** | Hematite/Gun | Black fabric | Gunmetal |
+| 14 | **Tan AB** | AB | Tan fabric | |
+| 15 | **L.Silver** | LCT | Light LCT fabric | Light Silver |
 
 ### Common Product Name Aliases
 
@@ -215,9 +219,20 @@ Rhinestone decoration patches designed specifically for footwear.
 | 4lines rope / chain | SS4/4lines diamond rope |
 | silver diamond | White stone (Crystal White) |
 | antik / antic | LCT color |
+| sultan | Peach color |
 | gold | Jonquil |
 | red | Siam |
-| light gold | Shadow / Golden Shadow (GS) |
+| light gold / L-golden | Shadow / Golden Shadow (GS) |
+| woodrose | AB+Woodrose fabric (default) |
+| black/gun | Gunmetal |
+
+### Other Stone Colors (not in standard 4lines chart)
+
+| Color | Also called | Description |
+|-------|------------|------------|
+| **Siam** | Red | 红色 |
+| **Pink** | | 粉色 |
+| **Light Peach** | | 浅蜜桃 |
 
 ### Fabric/Base Colors (for DR products with AB stone)
 

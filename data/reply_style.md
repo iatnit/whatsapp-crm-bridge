@@ -23,21 +23,10 @@
     - gold = jonquil
     - red = siam
     - light gold = shadow = GS = Golden Shadow
-17. **颜色对照表** — 常用颜色及其别名：
-    - White / Silver — 白钻（最常见）
-    - LCT (antik/antic) — 水晶黄/琥珀色
-    - Peach — 香槟色/蜜桃色
-    - BD / Grey — 透明灰/黑钻
-    - Jonquil (gold) — 浅黄色
-    - Red / Siam — 红色
-    - Shadow / GS / Golden Shadow (light gold) — 金香槟
-    - AB+Woodrose fabric — AB石+玫瑰木底布
-    - AB+Cream fabric — AB石+奶油底布
-    - AB+White fabric — AB石+白色底布
-    - AB+Black fabric — AB石+黑色底布
-    - AB+Peach fabric — AB石+蜜桃底布
-    - AB+Pink fabric — AB石+粉色底布
-    以上是主要颜色，有特殊颜色客户会说明
+17. **SS4/4lines & 3lines 完整15色** — Silver(白), Sultan/Peach(蜜桃), Grey/BD(灰), Antic/LCT(水晶黄), WoodRose(玫瑰木AB), White AB, Black/Silver(黑银), Golden/Jonquil(浅黄), Cream AB(奶油AB), L-Golden/Shadow/GS(金香槟), Black(黑), Black AB, Black/Gun/Gunmetal(枪色), Tan AB(棕褐AB), L.Silver(浅银)
+    - sultan = peach, antic = LCT, woodrose 默认是 AB+woodrose fabric, L-golden = shadow = GS = golden shadow
+    - 其他颜色：Red/Siam(红), Pink(粉), Light Peach(浅蜜桃)
+    - AB底布：AB+White, AB+Cream, AB+Peach, AB+Pink, AB+WoodRose, AB+Black
 18. **包装方式 (Packing)** — 鞋材抽条 diamond rope 有两种包装：
     - **Roll packing（打卷）** — 宽度 <6mm 的常用，新德里及附近地区偏好
     - **Bunch packing（扎捆）** — 6mm 以上一般都用 bunch，孟买周边偏好
