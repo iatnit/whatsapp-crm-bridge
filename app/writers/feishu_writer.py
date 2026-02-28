@@ -200,11 +200,15 @@ _customer_cache: dict[str, str] = {}  # lowercase name → record_id
 # Dedup cache for ensure_followup (key: "name|YYYY-MM-DD" → record_id)
 _followup_cache: dict[str, str] = {}
 
+# Attachment cache: same key → list of {"file_token": "xxx"} already written
+_attachment_cache: dict[str, list[dict]] = {}
+
 
 def clear_customer_cache():
     """Clear the in-memory customer and followup caches. Call at pipeline start."""
     _customer_cache.clear()
     _followup_cache.clear()
+    _attachment_cache.clear()
 
 
 async def ensure_customer(
@@ -353,7 +357,11 @@ async def ensure_followup(
             "总结": summary or "",
         }
         if attachments:
-            update_fields["附件"] = attachments
+            # Merge with locally cached attachments — no extra API call
+            old_attachments = _attachment_cache.get(cache_key, [])
+            merged = old_attachments + attachments
+            update_fields["附件"] = merged
+            _attachment_cache[cache_key] = merged
         result = await _update_record(
             settings.feishu_table_followup, cached_record_id, update_fields
         )
@@ -380,7 +388,9 @@ async def ensure_followup(
         if attachments:
             # Merge with existing attachments
             old_attachments = old_fields.get("附件", []) or []
-            update_fields["附件"] = old_attachments + attachments
+            merged = old_attachments + attachments
+            update_fields["附件"] = merged
+            _attachment_cache[cache_key] = merged
 
         result = await _update_record(
             settings.feishu_table_followup, record_id, update_fields
@@ -402,4 +412,6 @@ async def ensure_followup(
     )
     if record_id:
         _followup_cache[cache_key] = record_id
+        if attachments:
+            _attachment_cache[cache_key] = attachments
     return record_id
