@@ -191,20 +191,6 @@ async def handle_auto_reply(
     if msg_type in ("reaction", "sticker"):
         return
 
-    # Night mode: after midnight (CST) send a brief "will reply tomorrow" message
-    cst_now = datetime.now(timezone(timedelta(hours=8)))
-    if cst_now.hour >= 0 and cst_now.hour < 8:
-        # Check cooldown to avoid sending this repeatedly
-        if not _check_cooldown(phone):
-            night_msg = "hi friend, I will reply to you first thing tomorrow morning. please leave me your message, talk soon 👍"
-            if not _is_duplicate_reply(phone, night_msg):
-                msg_id = await send_text_message(phone, night_msg)
-                if msg_id:
-                    _record_reply(phone)
-                    _last_reply_text[phone] = night_msg
-                    logger.info("Night auto-reply sent to %s", phone)
-        return
-
     # For media messages (image/video/audio/document), delay 10 minutes
     # to let Lucky reply first; if no human reply, send a brief acknowledgment
     if msg_type in ("image", "video", "audio", "document", "voice"):
