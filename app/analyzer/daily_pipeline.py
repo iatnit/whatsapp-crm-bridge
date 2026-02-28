@@ -20,6 +20,7 @@ from app.writers.hubspot_writer import (
     ensure_contact as hubspot_ensure_contact,
     ensure_note as hubspot_ensure_note,
     clear_contact_cache as hubspot_clear_cache,
+    build_hubspot_properties,
 )
 
 logger = logging.getLogger(__name__)
@@ -190,8 +191,9 @@ async def run_daily_pipeline() -> dict:
         hubspot_written = False
         if settings.hubspot_enabled:
             try:
+                hs_extra = build_hubspot_properties(analysis, phone)
                 hs_contact_id = await hubspot_ensure_contact(
-                    phone, name=feishu_name, country=location)
+                    phone, name=feishu_name, country=location, extra=hs_extra)
                 if hs_contact_id:
                     hs_note_id = await hubspot_ensure_note(
                         hs_contact_id, phone,

@@ -48,7 +48,14 @@ ANALYSIS_PROMPT_TEMPLATE = """\
   "followup_detail": "详细跟进记录，2-5句话，记录关键信息",
   "summary": "一句话总结本次沟通结果",
   "tags": ["status/active 或 status/potential", "priority/high 或 priority/medium 或 priority/low"],
-  "is_new_customer": true 或 false
+  "is_new_customer": true 或 false,
+  "crm_fields": {{
+    "customer_type": "manufacturer / wholesaler / retailer / agent / brand / unknown",
+    "industry": ["garment", "shoes", "bags", "accessories", "crafts", "bridal", "home_textile"],
+    "competitor_mentioned": ["amy", "coco", "yang", "preciosa", "其他名称"],
+    "moq_qualified": true 或 false 或 null,
+    "price_sensitivity": "high / medium / low / unknown"
+  }}
 }}
 
 规则：
@@ -58,6 +65,11 @@ ANALYSIS_PROMPT_TEMPLATE = """\
 - followup_detail 要包含足够细节，方便 CRM 查看
 - summary 一句话概括，方便快速浏览
 - recommended_codes 用 LOCA 编码格式：DR14-6mm、DS40-24x40 等
+- crm_fields.customer_type: 根据对话推断客户类型。提到工厂/生产→manufacturer，批发→wholesaler，零售→retailer，代理→agent，品牌→brand，不确定→unknown
+- crm_fields.industry: 根据产品用途推断行业，只返回匹配的，未提到则返回空数组
+- crm_fields.competitor_mentioned: 如提到竞品供应商（amy/coco/yang/preciosa等），列出；未提到返回空数组
+- crm_fields.moq_qualified: 如客户需求量达到50000米或50箱以上→true，明确低于→false，未提到→null
+- crm_fields.price_sensitivity: 频繁砍价→high，讨论但可接受→medium，不太关注价格→low，未涉及→unknown
 - 只返回 JSON 对象，不要 markdown 代码块\
 """
 

@@ -94,8 +94,14 @@ async def search_contact_by_phone(phone: str) -> str | None:
     return None
 
 
-async def create_contact(phone: str, name: str = "", country: str = "") -> str | None:
+async def create_contact(
+    phone: str, name: str = "", country: str = "",
+    extra: dict | None = None,
+) -> str | None:
     """Create a new HubSpot contact.
+
+    Args:
+        extra: Additional LOCA custom properties to set.
 
     Returns the new contact ID or None.
     """
@@ -109,9 +115,15 @@ async def create_contact(phone: str, name: str = "", country: str = "") -> str |
         "phone": normalized,
         "firstname": firstname,
         "lastname": lastname,
+        "whatsapp_number": normalized,
+        "lead_source_channel": "whatsapp",
     }
     if country:
         properties["country"] = country
+
+    # Merge LOCA custom properties
+    if extra:
+        properties.update(extra)
 
     url = f"{BASE_URL}/crm/v3/objects/contacts"
 
@@ -127,8 +139,14 @@ async def create_contact(phone: str, name: str = "", country: str = "") -> str |
     return contact_id
 
 
-async def update_contact(contact_id: str, name: str = "", country: str = "") -> bool:
+async def update_contact(
+    contact_id: str, name: str = "", country: str = "",
+    extra: dict | None = None,
+) -> bool:
     """Update an existing HubSpot contact.
+
+    Args:
+        extra: Additional LOCA custom properties to set.
 
     Returns True on success.
     """
@@ -140,6 +158,10 @@ async def update_contact(contact_id: str, name: str = "", country: str = "") -> 
             properties["lastname"] = parts[1]
     if country:
         properties["country"] = country
+
+    # Merge LOCA custom properties
+    if extra:
+        properties.update(extra)
 
     if not properties:
         return True  # nothing to update
@@ -157,7 +179,10 @@ async def update_contact(contact_id: str, name: str = "", country: str = "") -> 
     return True
 
 
-async def ensure_contact(phone: str, name: str = "", country: str = "") -> str | None:
+async def ensure_contact(
+    phone: str, name: str = "", country: str = "",
+    extra: dict | None = None,
+) -> str | None:
     """Search for a contact by phone; create if not found.
 
     Uses lock + cache to prevent concurrent duplicate creation.
@@ -167,26 +192,179 @@ async def ensure_contact(phone: str, name: str = "", country: str = "") -> str |
 
     # Fast path: cache hit
     if normalized in _contact_cache:
+        # Still update properties if extra data is provided
+        if extra:
+            await update_contact(_contact_cache[normalized], extra=extra)
         return _contact_cache[normalized]
 
     async with _contact_lock:
         # Double-check after lock
         if normalized in _contact_cache:
+            if extra:
+                await update_contact(_contact_cache[normalized], extra=extra)
             return _contact_cache[normalized]
 
         contact_id = await search_contact_by_phone(phone)
         if contact_id:
-            # Update name/country if provided
-            if name or country:
-                await update_contact(contact_id, name=name, country=country)
+            # Update name/country/extra if provided
+            if name or country or extra:
+                await update_contact(contact_id, name=name, country=country, extra=extra)
             _contact_cache[normalized] = contact_id
             return contact_id
 
         logger.info("HubSpot contact not found for %s, creating", normalized)
-        contact_id = await create_contact(phone, name=name, country=country)
+        contact_id = await create_contact(phone, name=name, country=country, extra=extra)
         if contact_id:
             _contact_cache[normalized] = contact_id
         return contact_id
+
+
+# ── Analysis → HubSpot property mapper ──────────────────────────────
+
+# Map from LOCA product code prefix to HubSpot product_interest value
+_PRODUCT_CODE_MAP = {
+    "DR": "DR", "DS": "DS", "DT": "DT", "DF": "DF",
+    "PVC": "PVC", "MA": "MA", "SP": "SP",
+}
+
+# Map from analysis location keywords to market region
+_REGION_KEYWORDS = {
+    "india": "south_asia", "pakistan": "south_asia", "bangladesh": "south_asia",
+    "sri lanka": "south_asia", "nepal": "south_asia",
+    "vietnam": "southeast_asia", "thailand": "southeast_asia",
+    "indonesia": "southeast_asia", "philippines": "southeast_asia",
+    "malaysia": "southeast_asia", "cambodia": "southeast_asia",
+    "myanmar": "southeast_asia",
+    "dubai": "middle_east", "uae": "middle_east", "saudi": "middle_east",
+    "turkey": "middle_east", "iran": "middle_east", "qatar": "middle_east",
+    "egypt": "africa", "nigeria": "africa", "kenya": "africa",
+    "south africa": "africa", "morocco": "africa", "ethiopia": "africa",
+    "brazil": "latin_america", "mexico": "latin_america",
+    "colombia": "latin_america", "argentina": "latin_america",
+    "italy": "europe", "spain": "europe", "france": "europe",
+    "germany": "europe", "uk": "europe", "portugal": "europe",
+    "usa": "north_america", "canada": "north_america",
+}
+
+# Map analysis language to HubSpot comm_language value
+_LANG_MAP = {
+    "english": "english", "英语": "english", "英文": "english",
+    "hindi": "hindi", "印地语": "hindi",
+    "arabic": "arabic", "阿拉伯语": "arabic",
+    "spanish": "spanish", "西班牙语": "spanish",
+    "french": "french", "法语": "french",
+}
+
+
+def build_hubspot_properties(analysis: dict, phone: str) -> dict:
+    """Extract HubSpot custom properties from the LLM analysis result.
+
+    Returns a dict of HubSpot property name → value ready for API write.
+    Only includes properties that have meaningful values.
+    """
+    props: dict = {}
+    customer_info = analysis.get("customer_info", {})
+    crm_fields = analysis.get("crm_fields", {})
+    tags = analysis.get("tags", [])
+
+    # ── Product interest (from recommended_codes) ──
+    codes = analysis.get("recommended_codes", [])
+    product_prefixes = set()
+    for code in codes:
+        prefix = code.upper().split("-")[0].split("_")[0]
+        if prefix in _PRODUCT_CODE_MAP:
+            product_prefixes.add(_PRODUCT_CODE_MAP[prefix])
+    if product_prefixes:
+        props["product_interest"] = ";".join(sorted(product_prefixes))
+
+    # ── Location → city + market_region ──
+    location = customer_info.get("location", "")
+    if location:
+        props["customer_city"] = location
+        loc_lower = location.lower()
+        for keyword, region in _REGION_KEYWORDS.items():
+            if keyword in loc_lower:
+                props["market_region"] = region
+                break
+
+    # ── Communication language ──
+    language = customer_info.get("language", "")
+    if language:
+        lang_lower = language.lower().strip()
+        for key, value in _LANG_MAP.items():
+            if key in lang_lower:
+                props["comm_language"] = value
+                break
+
+    # ── Customer stage (from tags + is_new_customer) ──
+    if analysis.get("is_new_customer"):
+        props["customer_stage"] = "new_lead"
+    else:
+        for tag in tags:
+            if "active" in tag:
+                props["customer_stage"] = "contacted"
+                break
+
+    # ── Customer tags (from priority tags) ──
+    tag_values = []
+    for tag in tags:
+        if "priority/high" in tag:
+            tag_values.append("hot_lead")
+    if analysis.get("is_new_customer"):
+        tag_values.append("first_timer")
+    if tag_values:
+        props["customer_tags"] = ";".join(tag_values)
+
+    # ── crm_fields from expanded LLM output ──
+    if crm_fields:
+        # Customer type
+        ct = crm_fields.get("customer_type", "unknown")
+        if ct and ct != "unknown":
+            props["customer_type"] = ct
+
+        # Industry
+        industries = crm_fields.get("industry", [])
+        if industries:
+            props["industry"] = ";".join(industries)
+
+        # Competitor
+        competitors = crm_fields.get("competitor_mentioned", [])
+        valid_competitors = []
+        for c in competitors:
+            c_lower = c.lower()
+            if "amy" in c_lower:
+                valid_competitors.append("amy")
+            elif "coco" in c_lower:
+                valid_competitors.append("coco")
+            elif "yang" in c_lower:
+                valid_competitors.append("yang")
+            elif "preciosa" in c_lower:
+                valid_competitors.append("preciosa")
+            else:
+                valid_competitors.append("other")
+        if valid_competitors:
+            props["competitor_using"] = ";".join(set(valid_competitors))
+
+        # MOQ qualified
+        moq = crm_fields.get("moq_qualified")
+        if moq is True:
+            props["moq_qualified"] = "true"
+            props["customer_tier"] = "A"
+        elif moq is False:
+            props["moq_qualified"] = "false"
+            props["customer_tier"] = "C"
+
+        # Price sensitivity
+        ps = crm_fields.get("price_sensitivity", "unknown")
+        if ps and ps != "unknown":
+            props["price_sensitivity"] = ps
+
+    # ── WhatsApp number (always set) ──
+    if phone:
+        normalized = _normalize_phone(phone)
+        props["whatsapp_number"] = normalized
+
+    return props
 
 
 # ── Note operations ──────────────────────────────────────────────────
