@@ -4,6 +4,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from itertools import groupby
 from operator import itemgetter
+from pathlib import Path
 
 from app.store.messages import get_unprocessed_messages, mark_processed
 from app.store.conversations import get_all_conversations
@@ -74,6 +75,16 @@ async def run_daily_pipeline() -> dict:
 
         logger.info("Analyzing %s (%s) — %d messages", customer_name, phone, len(msgs))
 
+        # Collect image file paths for this customer
+        image_paths = [
+            m["media_path"] for m in msgs
+            if m.get("media_path")
+            and m.get("msg_type") == "image"
+            and Path(m["media_path"]).exists()
+        ]
+        if image_paths:
+            logger.info("Found %d images for %s", len(image_paths), customer_name)
+
         # Analyze
         analysis = await analyze_conversation(msgs, customer_name, phone)
         if not analysis:
@@ -105,6 +116,7 @@ async def run_daily_pipeline() -> dict:
                     detail=analysis.get("followup_detail", ""),
                     summary=analysis.get("summary", ""),
                     method="WhatsApp沟通",
+                    image_paths=image_paths,
                 )
                 if followup_id:
                     written_count += 1

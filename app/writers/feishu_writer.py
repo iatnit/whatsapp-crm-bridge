@@ -249,6 +249,7 @@ async def create_followup(
     detail: str,
     summary: str = "",
     method: str = "WhatsApp沟通",
+    attachments: list[dict] | None = None,
 ) -> str | None:
     """Create a follow-up record in 客户跟进记录.
 
@@ -258,6 +259,7 @@ async def create_followup(
         detail: detailed notes (跟进情况)
         summary: one-liner (总结)
         method: follow-up method (跟进形式)
+        attachments: list of {"file_token": "xxx"} for Bitable attachment field
 
     Returns the new record_id or None.
     """
@@ -269,6 +271,8 @@ async def create_followup(
     }
     if summary:
         fields["总结"] = summary
+    if attachments:
+        fields["附件"] = attachments
 
     record = await _create_record(settings.feishu_table_followup, fields)
     return record.get("record_id") if record else None
@@ -309,16 +313,34 @@ async def ensure_followup(
     detail: str,
     summary: str = "",
     method: str = "WhatsApp沟通",
+    image_paths: list[str] | None = None,
 ) -> str | None:
     """Create or update a follow-up record (max 1 per customer per day).
 
     If a followup already exists for this customer today, appends to it.
     Otherwise creates a new record.
     Uses both in-memory cache and Feishu search for dedup.
+
+    Args:
+        image_paths: list of local file paths to upload as attachments.
     """
     cst = timezone(timedelta(hours=8))
     today_str = datetime.now(cst).strftime("%Y-%m-%d")
     cache_key = f"{customer_name.strip().lower()}|{today_str}"
+
+    # Upload images to Feishu if provided
+    attachments = None
+    if image_paths:
+        try:
+            from app.writers.feishu_uploader import upload_files_for_bitable
+            token = await _get_tenant_token()
+            attachments = await upload_files_for_bitable(
+                image_paths, token, settings.feishu_app_token
+            )
+            if attachments:
+                logger.info("Uploaded %d images for %s", len(attachments), customer_name)
+        except Exception as e:
+            logger.error("Image upload failed for %s: %s", customer_name, e)
 
     # Check in-memory cache first
     cached_record_id = _followup_cache.get(cache_key)
@@ -330,6 +352,8 @@ async def ensure_followup(
             "跟进情况": detail,
             "总结": summary or "",
         }
+        if attachments:
+            update_fields["附件"] = attachments
         result = await _update_record(
             settings.feishu_table_followup, cached_record_id, update_fields
         )
@@ -353,6 +377,10 @@ async def ensure_followup(
             "跟进情况": new_detail,
             "总结": new_summary,
         }
+        if attachments:
+            # Merge with existing attachments
+            old_attachments = old_fields.get("附件", []) or []
+            update_fields["附件"] = old_attachments + attachments
 
         result = await _update_record(
             settings.feishu_table_followup, record_id, update_fields
@@ -370,6 +398,7 @@ async def ensure_followup(
         detail=detail,
         summary=summary,
         method=method,
+        attachments=attachments,
     )
     if record_id:
         _followup_cache[cache_key] = record_id

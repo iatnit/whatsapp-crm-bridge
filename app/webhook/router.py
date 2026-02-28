@@ -73,7 +73,10 @@ async def receive_webhook(request: Request):
             if isinstance(data_obj, dict):
                 media_url = data_obj.get("url", "")
         if media_url:
-            media_path = await download_media(wa_message_id, media_url) or ""
+            media_path = await download_media(
+                wa_message_id, media_url,
+                display_name=display_name, phone=phone,
+            ) or ""
     elif msg_type == "sticker":
         content = "[sticker]"
     elif msg_type == "location":
