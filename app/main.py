@@ -44,6 +44,21 @@ async def scheduled_daily_analysis():
 async def lifespan(app: FastAPI):
     # Startup
     await init_db()
+
+    # Hourly interval pipeline (if enabled)
+    if settings.pipeline_interval_hours > 0:
+        scheduler.add_job(
+            scheduled_daily_analysis,
+            "interval",
+            hours=settings.pipeline_interval_hours,
+            id="interval_analysis",
+        )
+        logger.info(
+            "Interval pipeline enabled: every %d hour(s)",
+            settings.pipeline_interval_hours,
+        )
+
+    # Keep nightly summary as well
     scheduler.add_job(
         scheduled_daily_analysis,
         "cron",

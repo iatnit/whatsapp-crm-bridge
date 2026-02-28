@@ -52,6 +52,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     daily_analysis_hour: int = 23
     daily_analysis_minute: int = 0
+    pipeline_interval_hours: int = 1   # run pipeline every N hours (0 = disabled, use daily cron only)
 
     # --- Paths ---
     data_dir: Path = Path("data")
