@@ -7,7 +7,11 @@ from operator import itemgetter
 from pathlib import Path
 
 from app.store.messages import get_unprocessed_messages, mark_processed
-from app.store.conversations import get_all_conversations
+from app.store.conversations import (
+    get_all_conversations,
+    get_unmatched_conversations,
+    update_customer_match,
+)
 from app.matcher.customer_matcher import match_all_unmatched, load_customers
 from app.analyzer.claude_analyzer import analyze_conversation
 from app.config import settings
@@ -19,6 +23,48 @@ from app.writers.hubspot_writer import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+async def _auto_create_unmatched(
+    already_processed: dict[str, dict],
+    errors: list[str],
+) -> int:
+    """Auto-create Feishu customer records for unmatched conversations.
+
+    Handles the backlog of conversations that were never matched and whose
+    messages were already processed in prior runs. Queries the DB for
+    conversations still marked as 'unmatched' (pipeline loop already updated
+    any it processed to 'auto_created').
+
+    Returns count of newly auto-created customers.
+    """
+    unmatched = await get_unmatched_conversations()
+    if not unmatched:
+        return 0
+
+    logger.info("Processing %d unmatched conversations (backlog)", len(unmatched))
+    count = 0
+
+    for conv in unmatched:
+        phone = conv["phone"]
+        display_name = conv.get("display_name", "") or phone
+
+        try:
+            record_id = await ensure_customer(
+                display_name, phone=phone, contact_person=display_name,
+            )
+            if record_id:
+                await update_customer_match(phone, record_id, display_name, "auto_created")
+                count += 1
+                logger.info("Backlog auto-created customer '%s' for %s", display_name, phone)
+            else:
+                errors.append(f"Failed to auto-create customer for {display_name} ({phone})")
+        except Exception as e:
+            logger.error("Auto-create error for %s: %s", phone, e)
+            errors.append(f"Auto-create error for {display_name}: {e}")
+
+    logger.info("Auto-created %d / %d unmatched backlog customers", count, len(unmatched))
+    return count
 
 
 async def run_daily_pipeline() -> dict:
@@ -47,8 +93,13 @@ async def run_daily_pipeline() -> dict:
     # Step 2: Get unprocessed messages (default: all unprocessed)
     messages = await get_unprocessed_messages()
     if not messages:
-        logger.info("No unprocessed messages. Pipeline done.")
-        return {"total_conversations": 0, "analyzed": 0, "written": 0, "errors": []}
+        logger.info("No unprocessed messages, checking unmatched backlog only")
+        backlog_errors: list[str] = []
+        auto_created = await _auto_create_unmatched({}, backlog_errors)
+        return {
+            "total_conversations": 0, "analyzed": 0, "written": 0,
+            "auto_created": auto_created, "errors": backlog_errors,
+        }
 
     logger.info("Found %d unprocessed messages", len(messages))
 
@@ -109,6 +160,13 @@ async def run_daily_pipeline() -> dict:
             if not record_id:
                 errors.append(f"Failed to create/find Feishu customer for {feishu_name}")
             else:
+                # Update match_status if conversation was unmatched
+                match_status = conv.get("match_status", "")
+                if match_status in ("unmatched", "", None):
+                    await update_customer_match(
+                        phone, record_id, feishu_name, "auto_created"
+                    )
+                    logger.info("Auto-created customer '%s' for %s", feishu_name, phone)
                 followup_id = await ensure_followup(
                     customer_record_id=record_id,
                     customer_name=feishu_name,
@@ -159,12 +217,17 @@ async def run_daily_pipeline() -> dict:
         else:
             logger.warning("Skipping mark_processed for %s — no CRM write succeeded", customer_name)
 
+    # Step 6: Auto-create customers for remaining unmatched conversations
+    # (backlog — those with no unprocessed messages left)
+    auto_created = await _auto_create_unmatched(conversations_db, errors)
+
     summary = {
         "total_conversations": len(grouped),
         "total_messages": len(messages),
         "analyzed": analyzed_count,
         "written": written_count,
         "new_matches": len(match_results),
+        "auto_created": auto_created,
         "errors": errors,
         "results": results,
     }
