@@ -62,9 +62,21 @@ Rhinestone strips with fabric lamination and cotton/EVA core. Our best-selling p
 - Staggered/Zigzag (错位) — offset rows for denser look
 
 **Packaging**:
-- **Roll packing (打卷)**: For width <6mm. 50m x 40 rolls, 1000-2000m per roll. Preferred in Delhi/North India area.
+- **Roll packing (打卷)**: For width <6mm. Preferred in Delhi/North India area.
 - **Bunch packing (扎捆)**: For width ≥6mm. Preferred in Mumbai/West India area.
 - Can be customized per customer preference.
+
+**Packing Quantity per Bale (每件数量)**:
+
+| Product | Meters per Bale | Notes |
+|---------|----------------|-------|
+| SS4/3lines | 2,000m | |
+| SS4/4lines (roll) | 2,000m | Roll packing |
+| SS4/4lines (bunch) | 1,500m | Bunch packing |
+| SS4/6lines | 1,000m | |
+| SS4/9lines | 600m | |
+| 2.5x2.5/4lines | 600m | |
+| DR-14-6mm | 1,500m | ~23kg per bale |
 
 ---
 
