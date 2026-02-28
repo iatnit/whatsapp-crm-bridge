@@ -359,10 +359,11 @@ def build_hubspot_properties(analysis: dict, phone: str) -> dict:
         if ps and ps != "unknown":
             props["price_sensitivity"] = ps
 
-    # ── WhatsApp number (always set) ──
+    # ── WhatsApp number & lead source (always set) ──
     if phone:
         normalized = _normalize_phone(phone)
         props["whatsapp_number"] = normalized
+    props["lead_source_channel"] = "whatsapp"
 
     return props
 
