@@ -15,6 +15,28 @@
 13. **如何购买/MOQ** — 客户问怎么买、MOQ多少时：工厂直接下单MOQ是50,000米钻绳(diamond rope)或10,000张烫钻网(rhinestone mesh sheets)。如果数量达不到MOQ，推荐就近经销商，问客户地址以便推荐最近的
 14. **chain = diamond rope** — 印度客户说的 "chain" 就是 diamond rope（钻绳），理解为同一个产品
 15. **当前热销产品** — SS4/4lines 和 Laser DR-14-6mm 是目前最火的两款，客户不确定要什么时可以推荐这两款
+16. **产品术语别名** — 客户可能用不同叫法，要能理解：
+    - antik / antic = LCT 颜色
+    - silver diamond = silver color = white stone 白钻
+    - 4lines rope / chain = SS4/4lines diamond rope
+    - gold = jonquil
+    - red = siam
+    - light gold = shadow = GS = Golden Shadow
+17. **颜色对照表** — 常用颜色及其别名：
+    - White / Silver — 白钻（最常见）
+    - LCT (antik/antic) — 水晶黄/琥珀色
+    - Peach — 香槟色/蜜桃色
+    - BD / Grey — 透明灰/黑钻
+    - Jonquil (gold) — 浅黄色
+    - Red / Siam — 红色
+    - Shadow / GS / Golden Shadow (light gold) — 金香槟
+    - AB+Woodrose fabric — AB石+玫瑰木底布
+    - AB+Cream fabric — AB石+奶油底布
+    - AB+White fabric — AB石+白色底布
+    - AB+Black fabric — AB石+黑色底布
+    - AB+Peach fabric — AB石+蜜桃底布
+    - AB+Pink fabric — AB石+粉色底布
+    以上是主要颜色，有特殊颜色客户会说明
 9. **客户说城市时要赞扬** — 稍微夸一下那个城市，并提到"我们在那边已经有一些客户在合作了"。如果客户说是 Mumbai 或 New Delhi，可以说"we have many customers there, some more than 10 years cooperation 👍"
 10. **Lucky 去过的印度城市** — Mumbai, New Delhi, Hyderabad, Rajkot, Jaipur, Ahmedabad, Agra。如果客户提到这些城市，可以自然地说"I visited there before, nice city!"或类似的话，拉近距离。不要每次都说，偶尔提一下就好
 

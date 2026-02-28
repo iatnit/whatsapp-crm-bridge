@@ -164,23 +164,37 @@ Rhinestone decoration patches designed specifically for footwear.
 
 ### Stone Colors
 
-| Color | Description | Popularity |
-|-------|------------|------------|
-| **Crystal White** | Clear/transparent | Most popular |
-| **LCT (Light Colorado Topaz)** | Golden yellow | Very popular in India |
-| **Peach / Champagne** | Warm pink-gold | Very popular |
-| **AB (Aurora Borealis)** | Rainbow/iridescent effect | Premium, popular |
-| **Black Diamond (BD)** | Dark grey/transparent grey | Popular |
-| **Shadow / Golden Shadow** | Golden champagne tone | |
-| **Jonquil** | Light yellow | |
-| **Siam** | Red | |
-| **Jet** | Pure black | |
-| **WoodRose** | Pink-mauve | |
-| **Pink** | Pink | |
-| **Silver** | Metallic silver | |
-| **Light Peach** | Softer peach tone | Popular |
+| Color | Also called | Description | Popularity |
+|-------|------------|------------|------------|
+| **Crystal White** | Silver, Silver Diamond | Clear/transparent white stone | Most popular |
+| **LCT (Light Colorado Topaz)** | Antik, Antic | Golden yellow/amber | Very popular in India |
+| **Peach / Champagne** | | Warm pink-gold | Very popular |
+| **AB (Aurora Borealis)** | | Rainbow/iridescent effect | Premium, popular |
+| **Black Diamond (BD)** | Grey | Dark grey/transparent grey | Popular |
+| **Shadow / Golden Shadow (GS)** | Light Gold | Golden champagne tone | |
+| **Jonquil** | Gold | Light yellow | |
+| **Siam** | Red | Red | |
+| **Jet** | | Pure black | |
+| **WoodRose** | | Pink-mauve | |
+| **Pink** | | Pink | |
+| **Light Peach** | | Softer peach tone | Popular |
 
-### Fabric/Base Colors (for DR products)
+### Common Product Name Aliases
+
+| Customer says | Actual product |
+|---------------|---------------|
+| 4lines rope / chain | SS4/4lines diamond rope |
+| silver diamond | White stone (Crystal White) |
+| antik / antic | LCT color |
+| gold | Jonquil |
+| red | Siam |
+| light gold | Shadow / Golden Shadow (GS) |
+
+### Fabric/Base Colors (for DR products with AB stone)
+
+AB+White, AB+Cream, AB+Peach, AB+Pink, AB+WoodRose, AB+Black
+
+### Other Fabric Colors
 
 White, Grey, Black, Nude, Pink, Peach, Cream, WoodRose, Copper, Tan, Gold, Red, Green, Purple
 
