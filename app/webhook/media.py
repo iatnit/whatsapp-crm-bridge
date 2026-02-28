@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 # Daily sequence counter: "safe_name-YYYYMMDD" → int
 _daily_seq: dict[str, int] = {}
+_seq_date: str = ""  # track current date to reset on day change
 
 
 def sanitize_name(name: str) -> str:
@@ -43,7 +44,16 @@ def sanitize_name(name: str) -> str:
 
 
 def _next_seq(key: str) -> int:
-    """Return next sequence number for a name+date combination."""
+    """Return next sequence number for a name+date combination.
+
+    Resets the entire cache on day change to prevent unbounded growth.
+    """
+    global _seq_date
+    cst = timezone(timedelta(hours=8))
+    today = datetime.now(cst).strftime("%Y%m%d")
+    if today != _seq_date:
+        _daily_seq.clear()
+        _seq_date = today
     _daily_seq[key] = _daily_seq.get(key, 0) + 1
     return _daily_seq[key]
 

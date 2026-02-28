@@ -32,7 +32,11 @@ async def analyze_conversation(
     )
 
     if settings.llm_provider == "gemini":
-        return await _call_gemini(user_prompt)
+        result = await _call_gemini(user_prompt)
+        if result is None and settings.anthropic_api_key:
+            logger.warning("Gemini failed, falling back to Anthropic")
+            result = await _call_anthropic(user_prompt)
+        return result
     else:
         return await _call_anthropic(user_prompt)
 

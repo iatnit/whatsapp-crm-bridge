@@ -41,7 +41,11 @@ async def receive_webhook(request: Request):
       - id / whatsappMessageId: message ID for dedup
       - data: extra payload for media messages
     """
-    payload: dict[str, Any] = await request.json()
+    try:
+        payload: dict[str, Any] = await request.json()
+    except Exception as e:
+        logger.error("Invalid webhook JSON: %s", e)
+        return {"status": "error", "message": "Invalid JSON"}
 
     # WATI may send different eventTypes; we only care about messages
     event_type = payload.get("eventType", "")

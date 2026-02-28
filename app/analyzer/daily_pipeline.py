@@ -152,9 +152,12 @@ async def run_daily_pipeline() -> dict:
             "hubspot_written": hubspot_written,
         })
 
-        # Mark these messages as processed
-        msg_ids = [m["id"] for m in msgs]
-        await mark_processed(msg_ids)
+        # Mark processed only if at least one CRM write succeeded
+        if feishu_ok or hubspot_written:
+            msg_ids = [m["id"] for m in msgs]
+            await mark_processed(msg_ids)
+        else:
+            logger.warning("Skipping mark_processed for %s — no CRM write succeeded", customer_name)
 
     summary = {
         "total_conversations": len(grouped),
