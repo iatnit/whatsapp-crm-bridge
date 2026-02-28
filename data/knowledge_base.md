@@ -31,28 +31,40 @@ Rhinestone strips with fabric lamination and cotton/EVA core. Our best-selling p
 
 | Rows | Stone Size | Width (approx) | Common Use |
 |------|-----------|----------------|------------|
-| 3 Lines | SS4 | ~1.0 cm | Thin trim, bracelet |
-| 4 Lines | SS4 | ~1.2 cm | Most popular, saree/dress |
-| 5 Lines | SS4 | ~1.65 cm | Medium trim |
-| 6 Lines | SS4 | ~1.95 cm | Wide trim |
-| 9 Lines | SS4 | ~2.4 cm | Extra wide |
-| 11 Lines | SS4 | ~3.0 cm | Belt/waistband |
-| 19 Lines | SS4 | ~5.0 cm | Statement piece |
+| 3 Lines | SS4 | ~5 mm | Thin trim, bracelet |
+| 4 Lines | SS4 | ~6 mm | Most popular, saree/dress |
+| 5 Lines | SS4 | ~7 mm | Medium trim |
+| 6 Lines | SS4 | ~8-9 mm | Wide trim |
+| 9 Lines | SS4 | ~12-13 mm | Extra wide |
+| 9 Lines | SS5 | ~15 mm | Extra wide, larger stones |
+| 4 Lines | 2.5x2.5 | ~9-10 mm | Wide with larger stones |
+| 11 Lines | SS4 | ~30 mm | Belt/waistband |
+| 19 Lines | SS4 | ~50 mm | Statement piece |
 
 **DR-14-6mm Laser Series** (Popular product with sequin backing):
 - Width: 6mm
 - Available in Silver, Copper/Gold, Black, WoodRose, Peach, Grey and more laser base colors
 - Stone + laser sequin combination for extra sparkle
 
-**DR-14-7mm**: Wider version of 6mm laser series
-**DR-14-9mm / 10mm**: Large format for bold designs
-**DR-56-8mm**: 8mm width strip
+**DR-14 Width Options**:
+| Width | Notes |
+|-------|-------|
+| DR-14-6mm | Most popular, laser series |
+| DR-14-7mm | Wider version of 6mm |
+| DR-14-10mm | Large format for bold designs |
+| DR-14-12mm | Wide strip |
+| DR-14-14mm | Extra wide strip |
+
+**DR-56-8mm**: 8mm width strip (different stone layout from DR-14)
 
 **Layout Options**:
 - Straight (直排) — stones aligned in rows (default)
 - Staggered/Zigzag (错位) — offset rows for denser look
 
-**Packaging**: 50m x 40 rolls, 1000-2000m per roll, or customized
+**Packaging**:
+- **Roll packing (打卷)**: For width <6mm. 50m x 40 rolls, 1000-2000m per roll. Preferred in Delhi/North India area.
+- **Bunch packing (扎捆)**: For width ≥6mm. Preferred in Mumbai/West India area.
+- Can be customized per customer preference.
 
 ---
 
