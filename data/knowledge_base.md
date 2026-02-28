@@ -68,15 +68,20 @@ Rhinestone strips with fabric lamination and cotton/EVA core. Our best-selling p
 
 **Packing Quantity per Bale (每件数量)**:
 
-| Product | Meters per Bale | Notes |
-|---------|----------------|-------|
-| SS4/3lines | 2,000m | |
-| SS4/4lines (roll) | 2,000m | Roll packing |
-| SS4/4lines (bunch) | 1,500m | Bunch packing |
-| SS4/6lines | 1,000m | |
-| SS4/9lines | 600m | |
-| 2.5x2.5/4lines | 600m | |
-| DR-14-6mm | 1,500m | ~23kg per bale |
+| Product | Meters per Bale | Weight per Bale |
+|---------|----------------|-----------------|
+| SS4/3lines | 2,000m | 24.3kg |
+| SS4/4lines (bunch) | 1,500m | 24.5kg |
+| SS4/4lines (roll) | 2,000m | 32kg |
+| SS4/5lines | 1,500m | 35.5kg |
+| SS4/6lines | 1,000m | 26.8kg |
+| SS4/9lines | 500m | 16.9kg |
+| SS3.5/11lines staggered | 500m | 19.5kg |
+| DR-14-6mm | 1,500m | 23.7kg |
+| DR-14-7mm | 1,000m | 20.3kg |
+| DR-14-10mm | 1,000m | 23.1kg |
+| DR-14-12mm | 500m | 12.1kg |
+| DR-14-14mm | 500m | 16.8kg |
 
 ---
 
