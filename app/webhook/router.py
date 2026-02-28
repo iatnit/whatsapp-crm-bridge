@@ -14,6 +14,18 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1")
 
 
+async def _hubspot_upsert_contact(phone: str, display_name: str) -> None:
+    """Fire-and-forget HubSpot contact upsert."""
+    from app.config import settings
+    if not settings.hubspot_enabled:
+        return
+    try:
+        from app.writers.hubspot_writer import ensure_contact
+        await ensure_contact(phone, name=display_name)
+    except Exception as e:
+        logger.error("HubSpot upsert failed: %s", e)
+
+
 @router.post("/webhook")
 async def receive_webhook(request: Request):
     """Process incoming webhook events from WATI.
@@ -110,6 +122,10 @@ async def receive_webhook(request: Request):
         # Track human outbound → pause AI auto-reply
         if direction == "outbound":
             notify_outbound(phone)
+
+        # Real-time HubSpot contact upsert (fire-and-forget)
+        if direction == "inbound" and msg_type not in ("reaction", "sticker"):
+            asyncio.create_task(_hubspot_upsert_contact(phone, display_name))
 
         # Trigger AI auto-reply for inbound messages
         if direction == "inbound" and msg_type not in ("reaction", "sticker"):

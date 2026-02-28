@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     feishu_table_customers: str = "tbl4kQe0MeodIGGD"
     feishu_table_followup: str = "tblcftbYX7E0cEUo"
 
+    # --- HubSpot ---
+    hubspot_access_token: str = ""   # Private App access token
+    hubspot_enabled: bool = False    # 主开关
+
     # --- Auto Reply ---
     auto_reply_enabled: bool = True
     auto_reply_cooldown: int = 30          # seconds between replies to same customer

@@ -74,6 +74,15 @@ def generate_daily_report(summary: dict, unmatched: list[dict] | None = None) ->
         lines.append(f"- 失败: {fail}")
         lines.append("")
 
+    # HubSpot write stats
+    if results:
+        hs_ok = sum(1 for r in results if r.get("hubspot_written"))
+        hs_fail = len(results) - hs_ok
+        lines.append("## HubSpot写入统计")
+        lines.append(f"- 成功: {hs_ok}")
+        lines.append(f"- 失败: {hs_fail}")
+        lines.append("")
+
     # Unmatched customers
     if unmatched:
         lines.append("## 未匹配客户（需人工确认）")
