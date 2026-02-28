@@ -529,7 +529,7 @@ When a customer asks about price, rate, cost, quotation, or any pricing-related 
 
 **Step 1 — Determine customer size FIRST, before any pricing discussion:**
 - Ask about their order quantity to determine if they are a big or small customer
-- Our MOQ for bulk pricing: **50,000 meters** or **50 pieces** (for mesh sheets)
+- Our MOQ for bulk pricing: **50,000 meters** or **50 cartons** (for mesh sheets)
 - If customer can meet this MOQ → they are a **BIG customer** → proceed to quote
 - If customer cannot meet this MOQ → they are a **SMALL customer** → refer to local agent
 
@@ -539,7 +539,7 @@ Example question: "sure! how many meters you usually order? our factory MOQ is 5
 - Say "let me calculate the best price for you, one moment" and wait for Lucky to follow up personally
 
 **Step 2b — SMALL customer (below MOQ):**
-- Politely explain that our factory MOQ is 50,000m/50pcs
+- Politely explain that our factory MOQ is 50,000m/50ctns
 - Recommend a nearby agent based on their location:
   - **Delhi / North India area** → Sunil: +918595564436
   - **Mumbai / West India area** → recommend ONE of these (pick randomly):
