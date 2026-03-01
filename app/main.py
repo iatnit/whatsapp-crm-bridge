@@ -134,6 +134,17 @@ async def stats():
     }
 
 
+@app.get("/api/v1/sync/check")
+async def sync_check():
+    """Check cross-system CRM sync status (Feishu ↔ HubSpot).
+
+    Reports how many conversations have Feishu record_id, HubSpot contact_id,
+    both, or neither. Also lists conversations with missing links.
+    """
+    from app.store.conversations import get_sync_status
+    return await get_sync_status()
+
+
 @app.post("/api/v1/send")
 async def send_message(payload: dict):
     """Send a WhatsApp message and record it in the database.

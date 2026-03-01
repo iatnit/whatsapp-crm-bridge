@@ -153,6 +153,7 @@ async def search_customer(customer_name: str) -> str | None:
     """Search 客户管理CRM for a customer by name.
 
     Returns the record_id if found, None otherwise.
+    Also caches the Feishu 编号 for cross-system sync.
     """
     items = await _search_records(
         table_id=settings.feishu_table_customers,
@@ -161,6 +162,7 @@ async def search_customer(customer_name: str) -> str | None:
     )
     if items:
         record_id = items[0].get("record_id", "")
+        _extract_customer_number(items, record_id)
         logger.info("Found customer '%s' → %s", customer_name, record_id)
         return record_id
     return None
@@ -171,6 +173,7 @@ async def search_customer_by_phone(phone: str) -> str | None:
 
     Returns the record_id if found, None otherwise.
     More reliable than name-based search for dedup.
+    Also caches the Feishu 编号 for cross-system sync.
     """
     normalized = phone.strip().replace(" ", "").replace("-", "")
     if not normalized.startswith("+"):
@@ -183,6 +186,7 @@ async def search_customer_by_phone(phone: str) -> str | None:
     )
     if items:
         record_id = items[0].get("record_id", "")
+        _extract_customer_number(items, record_id)
         logger.info("Found customer by phone '%s' → %s", normalized, record_id)
         return record_id
     return None
@@ -198,6 +202,7 @@ async def create_customer(
     """Create a new customer in 客户管理CRM.
 
     Returns the new record_id or None.
+    Also caches the auto-generated Feishu 编号 for cross-system sync.
     """
     fields: dict = {"客户": name}
     if contact:
@@ -212,13 +217,20 @@ async def create_customer(
         fields["客户来源"] = source
 
     record = await _create_record(settings.feishu_table_customers, fields)
-    return record.get("record_id") if record else None
+    if record:
+        record_id = record.get("record_id", "")
+        _extract_customer_number(record, record_id)
+        return record_id
+    return None
 
 
 # Dedup lock and cache for ensure_customer
 _customer_lock = asyncio.Lock()
 _customer_cache: dict[str, str] = {}  # lowercase name → record_id
 _phone_cache: dict[str, str] = {}     # phone → record_id
+
+# Feishu 编号 cache: record_id → 6-digit customer number (e.g. "100008")
+_customer_number_cache: dict[str, str] = {}
 
 # Dedup cache for ensure_followup (key: "name|YYYY-MM-DD" → record_id)
 _followup_cache: dict[str, str] = {}
@@ -227,10 +239,41 @@ _followup_cache: dict[str, str] = {}
 _attachment_cache: dict[str, list[dict]] = {}
 
 
+def _extract_customer_number(record: dict | list, record_id: str = "") -> str:
+    """Extract 编号 from Feishu record fields and cache it.
+
+    Works with either a single record dict or a list of search result items.
+    Skips 编号=100 (unassigned placeholder).
+    """
+    if isinstance(record, list):
+        if not record:
+            return ""
+        item = record[0]
+    else:
+        item = record
+
+    fields = item.get("fields", {})
+    number = fields.get("编号", "")
+    if isinstance(number, (int, float)):
+        number = str(int(number))
+    number = str(number).strip() if number else ""
+
+    rid = record_id or item.get("record_id", "")
+    if rid and number and number != "100":
+        _customer_number_cache[rid] = number
+    return number
+
+
+def get_customer_number(record_id: str) -> str:
+    """Get cached Feishu 编号 for a customer record. Returns '' if not cached."""
+    return _customer_number_cache.get(record_id, "")
+
+
 def clear_customer_cache():
     """Clear the in-memory customer and followup caches. Call at pipeline start."""
     _customer_cache.clear()
     _phone_cache.clear()
+    _customer_number_cache.clear()
     _followup_cache.clear()
     _attachment_cache.clear()
 

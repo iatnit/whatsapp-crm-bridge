@@ -12,12 +12,15 @@ from app.store.conversations import (
     get_all_conversations,
     get_unmatched_conversations,
     update_customer_match,
+    update_hubspot_id,
 )
 from app.store.retry_queue import enqueue, get_pending, mark_success, mark_retried, cleanup_old
 from app.matcher.customer_matcher import match_all_unmatched, load_customers
 from app.analyzer.claude_analyzer import analyze_conversation
 from app.config import settings
-from app.writers.feishu_writer import ensure_customer, ensure_followup, clear_customer_cache
+from app.writers.feishu_writer import (
+    ensure_customer, ensure_followup, clear_customer_cache, get_customer_number,
+)
 from app.writers.hubspot_writer import (
     ensure_contact as hubspot_ensure_contact,
     ensure_note as hubspot_ensure_note,
@@ -208,6 +211,7 @@ async def run_daily_pipeline() -> dict:
 
         # Write to Feishu
         feishu_ok = False
+        record_id = None
         try:
             record_id = await ensure_customer(
                 feishu_name, phone=phone, location=location,
@@ -257,9 +261,19 @@ async def run_daily_pipeline() -> dict:
             try:
                 total_msgs = conv.get("total_messages", 0) or len(msgs)
                 hs_extra = build_hubspot_properties(analysis, phone, total_messages=total_msgs)
+
+                # P3: Sync Feishu 编号 → HubSpot feishu_customer_id
+                if record_id:
+                    feishu_number = get_customer_number(record_id)
+                    if feishu_number:
+                        hs_extra["feishu_customer_id"] = feishu_number
+
                 hs_contact_id = await hubspot_ensure_contact(
                     phone, name=feishu_name, country=location, extra=hs_extra)
                 if hs_contact_id:
+                    # P3: Store HubSpot contact ID in conversations table
+                    await update_hubspot_id(phone, hs_contact_id)
+
                     hs_note_id = await hubspot_ensure_note(
                         hs_contact_id, phone,
                         title=analysis.get("followup_title", "WhatsApp沟通"),

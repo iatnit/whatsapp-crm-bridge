@@ -15,27 +15,45 @@ router = APIRouter(prefix="/api/v1")
 
 
 async def _hubspot_upsert_contact(phone: str, display_name: str) -> None:
-    """Fire-and-forget HubSpot contact upsert with first_contact_date."""
+    """Fire-and-forget HubSpot contact upsert with first_contact_date.
+
+    Also stores the HubSpot contact ID in the conversations table (P3 sync).
+    Note: feishu编号 → HubSpot sync happens in the daily pipeline, not here,
+    because the parallel Feishu task may not have finished yet.
+    """
     from app.config import settings
     if not settings.hubspot_enabled:
         return
     try:
         from app.writers.hubspot_writer import ensure_contact
+        from app.store.conversations import update_hubspot_id
         from datetime import datetime, timezone
+
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        await ensure_contact(
+        contact_id = await ensure_contact(
             phone, name=display_name,
             extra={"first_contact_date": today, "last_contact_date": today},
         )
+        if contact_id:
+            await update_hubspot_id(phone, contact_id)
     except Exception as e:
         logger.error("HubSpot upsert failed: %s", e)
 
 
 async def _feishu_ensure_customer(phone: str, display_name: str) -> None:
-    """Fire-and-forget Feishu customer creation on first inbound message."""
+    """Fire-and-forget Feishu customer creation on first inbound message.
+
+    Also stores the Feishu record_id in the conversations table (P3 sync).
+    """
     try:
         from app.writers.feishu_writer import ensure_customer
-        await ensure_customer(display_name, phone=phone, contact_person=display_name)
+        from app.store.conversations import update_customer_match
+
+        record_id = await ensure_customer(
+            display_name, phone=phone, contact_person=display_name,
+        )
+        if record_id:
+            await update_customer_match(phone, record_id, display_name, "auto_created")
     except Exception as e:
         logger.error("Feishu real-time customer creation failed: %s", e)
 

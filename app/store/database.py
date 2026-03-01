@@ -55,6 +55,10 @@ MIGRATIONS = [
     )
     WHERE first_message_at IS NULL;
     """,
+    # P3: Add hubspot_contact_id for cross-system reference
+    """
+    ALTER TABLE conversations ADD COLUMN hubspot_contact_id TEXT DEFAULT '';
+    """,
 ]
 
 
