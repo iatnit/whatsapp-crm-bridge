@@ -112,6 +112,39 @@ async def get_active_phones_today(since_ts: int) -> list[str]:
         return [row["phone"] for row in rows]
 
 
+async def is_ai_disabled(phone: str) -> bool:
+    """Check if AI auto-reply is disabled for this phone."""
+    async with get_db() as db:
+        cursor = await db.execute(
+            "SELECT ai_disabled FROM conversations WHERE phone = ?",
+            (phone,),
+        )
+        row = await cursor.fetchone()
+        return bool(row and row["ai_disabled"])
+
+
+async def set_ai_disabled(phone: str, disabled: bool) -> bool:
+    """Enable or disable AI auto-reply for a phone. Returns True if row existed."""
+    async with get_db() as db:
+        cursor = await db.execute(
+            "UPDATE conversations SET ai_disabled = ? WHERE phone = ?",
+            (1 if disabled else 0, phone),
+        )
+        await db.commit()
+        return cursor.rowcount > 0
+
+
+async def get_ai_disabled_list() -> list[dict]:
+    """Return all customers with AI auto-reply disabled."""
+    async with get_db() as db:
+        cursor = await db.execute(
+            "SELECT phone, display_name, customer_name "
+            "FROM conversations WHERE ai_disabled = 1 "
+            "ORDER BY last_message_at DESC"
+        )
+        return [dict(row) for row in await cursor.fetchall()]
+
+
 async def get_customer_context(phone: str) -> dict:
     """Build customer context from local SQLite data (zero API calls).
 

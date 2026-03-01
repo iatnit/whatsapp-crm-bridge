@@ -59,6 +59,10 @@ MIGRATIONS = [
     """
     ALTER TABLE conversations ADD COLUMN hubspot_contact_id TEXT DEFAULT '';
     """,
+    # Disable AI auto-reply per customer (big/VIP customers handled manually)
+    """
+    ALTER TABLE conversations ADD COLUMN ai_disabled INTEGER DEFAULT 0;
+    """,
 ]
 
 

@@ -145,6 +145,34 @@ async def sync_check():
     return await get_sync_status()
 
 
+@app.post("/api/v1/ai/disable/{phone}")
+async def disable_ai(phone: str):
+    """Disable AI auto-reply for a customer (big/VIP, handled manually)."""
+    from app.store.conversations import set_ai_disabled
+    found = await set_ai_disabled(phone, disabled=True)
+    if not found:
+        return {"error": f"Phone {phone} not found in conversations"}
+    return {"status": "ok", "phone": phone, "ai_disabled": True}
+
+
+@app.post("/api/v1/ai/enable/{phone}")
+async def enable_ai(phone: str):
+    """Re-enable AI auto-reply for a customer."""
+    from app.store.conversations import set_ai_disabled
+    found = await set_ai_disabled(phone, disabled=False)
+    if not found:
+        return {"error": f"Phone {phone} not found in conversations"}
+    return {"status": "ok", "phone": phone, "ai_disabled": False}
+
+
+@app.get("/api/v1/ai/disabled")
+async def list_ai_disabled():
+    """List all customers with AI auto-reply disabled."""
+    from app.store.conversations import get_ai_disabled_list
+    customers = await get_ai_disabled_list()
+    return {"count": len(customers), "customers": customers}
+
+
 @app.post("/api/v1/send")
 async def send_message(payload: dict):
     """Send a WhatsApp message and record it in the database.

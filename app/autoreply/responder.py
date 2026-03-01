@@ -10,7 +10,7 @@ import httpx
 
 from app.config import settings
 from app.store.messages import get_messages_by_phone
-from app.store.conversations import get_customer_context
+from app.store.conversations import get_customer_context, is_ai_disabled
 from app.webhook.sender import send_text_message
 from app.autoreply.knowledge import get_knowledge_text, get_reply_style
 from app.autoreply.prompts import SYSTEM_PROMPT_TEMPLATE, USER_PROMPT_TEMPLATE
@@ -268,6 +268,11 @@ async def handle_auto_reply(
 
     if not settings.gemini_api_key:
         logger.warning("Auto-reply enabled but GEMINI_API_KEY not set")
+        return
+
+    # Skip customers with AI disabled (big/VIP customers handled manually)
+    if await is_ai_disabled(phone):
+        logger.debug("AI disabled for %s, skipping auto-reply", phone)
         return
 
     # Skip non-text-like messages that don't need replies
