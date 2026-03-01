@@ -4,7 +4,10 @@ import logging
 from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from pathlib import Path
+
 from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
 
 from app.config import settings
 from app.store.database import init_db
@@ -143,6 +146,43 @@ async def sync_check():
     """
     from app.store.conversations import get_sync_status
     return await get_sync_status()
+
+
+# ── AI Manager UI & API ─────────────────────────────────────────────
+
+_ai_manager_html: str | None = None
+
+
+@app.get("/ai-manager", response_class=HTMLResponse)
+async def ai_manager_page():
+    """Serve the AI Manager single-page UI."""
+    global _ai_manager_html
+    if _ai_manager_html is None:
+        _ai_manager_html = (
+            Path(__file__).parent / "static" / "ai-manager.html"
+        ).read_text()
+    return _ai_manager_html
+
+
+@app.get("/api/v1/ai/customers")
+async def list_ai_customers():
+    """Return all customers with AI-related fields for the manager UI."""
+    from app.store.conversations import get_all_conversations, get_customer_context
+
+    convs = await get_all_conversations()
+    customers = []
+    for c in convs:
+        ctx = await get_customer_context(c["phone"])
+        customers.append({
+            "phone": c["phone"],
+            "display_name": c.get("display_name", ""),
+            "customer_name": c.get("customer_name", ""),
+            "match_status": c.get("match_status", "unmatched"),
+            "total_messages": c.get("total_messages", 0),
+            "ai_disabled": c.get("ai_disabled", 0),
+            "relationship_stage": ctx["relationship_stage"],
+        })
+    return {"count": len(customers), "customers": customers}
 
 
 @app.post("/api/v1/ai/disable/{phone}")

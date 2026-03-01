@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Manager - WhatsApp CRM</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f0f2f5; color: #111b21; }
+.header { background: #008069; color: #fff; padding: 16px 20px; position: sticky; top: 0; z-index: 10; }
+.header h1 { font-size: 20px; font-weight: 600; }
+.header p { font-size: 12px; opacity: .8; margin-top: 2px; }
+.stats { display: flex; gap: 12px; padding: 12px 20px; background: #fff; border-bottom: 1px solid #e0e0e0; flex-wrap: wrap; }
+.stat { padding: 8px 16px; border-radius: 8px; background: #f0f2f5; font-size: 14px; white-space: nowrap; }
+.stat b { color: #008069; }
+.controls { padding: 12px 20px; background: #fff; display: flex; gap: 10px; flex-wrap: wrap; border-bottom: 1px solid #e0e0e0; }
+.controls input { flex: 1; min-width: 180px; padding: 10px 14px; border: 1px solid #d1d7db; border-radius: 8px; font-size: 14px; outline: none; }
+.controls input:focus { border-color: #008069; }
+.controls select { padding: 10px 14px; border: 1px solid #d1d7db; border-radius: 8px; font-size: 14px; background: #fff; outline: none; cursor: pointer; }
+.list { padding: 12px 20px; display: grid; gap: 10px; max-width: 900px; margin: 0 auto; }
+.card { background: #fff; border-radius: 10px; padding: 14px 16px; display: flex; align-items: center; gap: 14px; box-shadow: 0 1px 2px rgba(0,0,0,.08); transition: box-shadow .15s; }
+.card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.12); }
+.avatar { width: 44px; height: 44px; border-radius: 50%; background: #dfe5e7; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 600; color: #667781; flex-shrink: 0; }
+.info { flex: 1; min-width: 0; }
+.info .name { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.info .phone { font-size: 12px; color: #667781; margin-top: 1px; }
+.tags { display: flex; gap: 4px; margin-top: 6px; flex-wrap: wrap; }
+.tag { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #e7f7ef; color: #008069; }
+.tag.warn { background: #fff3cd; color: #856404; }
+.tag.muted { background: #f0f2f5; color: #667781; }
+.toggle-wrap { flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.toggle-label { font-size: 10px; color: #667781; }
+.toggle { position: relative; width: 44px; height: 24px; cursor: pointer; }
+.toggle input { opacity: 0; width: 0; height: 0; }
+.toggle .slider { position: absolute; inset: 0; background: #ccc; border-radius: 24px; transition: .2s; }
+.toggle .slider::before { content: ''; position: absolute; width: 18px; height: 18px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: .2s; }
+.toggle input:checked + .slider { background: #25d366; }
+.toggle input:checked + .slider::before { transform: translateX(20px); }
+.toggle input:disabled + .slider { opacity: .5; cursor: wait; }
+.empty { text-align: center; padding: 60px 20px; color: #667781; }
+.loading { text-align: center; padding: 60px 20px; color: #667781; }
+@media (max-width: 480px) {
+  .stats { gap: 8px; padding: 10px 14px; }
+  .stat { padding: 6px 10px; font-size: 12px; }
+  .controls { padding: 10px 14px; }
+  .list { padding: 10px 14px; }
+  .card { padding: 12px; gap: 10px; }
+  .avatar { width: 38px; height: 38px; font-size: 16px; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>AI Manager</h1>
+  <p>Manage AI auto-reply for WhatsApp customers</p>
+</div>
+
+<div class="stats" id="stats">
+  <div class="stat">Total: <b id="s-total">-</b></div>
+  <div class="stat">AI On: <b id="s-on">-</b></div>
+  <div class="stat">AI Off: <b id="s-off">-</b></div>
+</div>
+
+<div class="controls">
+  <input type="text" id="search" placeholder="Search name or phone...">
+  <select id="filter">
+    <option value="all">All</option>
+    <option value="ai-on">AI On</option>
+    <option value="ai-off">AI Off</option>
+    <option value="matched">Matched</option>
+    <option value="unmatched">Unmatched</option>
+  </select>
+</div>
+
+<div class="list" id="list">
+  <div class="loading">Loading customers...</div>
+</div>
+
+<script>
+let customers = [];
+
+async function loadCustomers() {
+  try {
+    const res = await fetch('/api/v1/ai/customers');
+    if (!res.ok) throw new Error(res.statusText);
+    const data = await res.json();
+    customers = data.customers || [];
+    updateStats();
+    render();
+  } catch (e) {
+    document.getElementById('list').innerHTML =
+      '<div class="empty">Failed to load: ' + e.message + '</div>';
+  }
+}
+
+function updateStats() {
+  const off = customers.filter(c => c.ai_disabled).length;
+  document.getElementById('s-total').textContent = customers.length;
+  document.getElementById('s-on').textContent = customers.length - off;
+  document.getElementById('s-off').textContent = off;
+}
+
+function getFiltered() {
+  const q = document.getElementById('search').value.toLowerCase().trim();
+  const f = document.getElementById('filter').value;
+  return customers.filter(c => {
+    if (q) {
+      const hay = (c.display_name + ' ' + c.customer_name + ' ' + c.phone).toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    if (f === 'ai-on' && c.ai_disabled) return false;
+    if (f === 'ai-off' && !c.ai_disabled) return false;
+    if (f === 'matched' && c.match_status !== 'matched') return false;
+    if (f === 'unmatched' && c.match_status !== 'unmatched') return false;
+    return true;
+  });
+}
+
+function initials(c) {
+  const name = c.customer_name || c.display_name || '?';
+  return name.charAt(0).toUpperCase();
+}
+
+function stageLabel(stage) {
+  const map = { new: 'New', early: 'Early', developing: 'Developing', established: 'VIP' };
+  return map[stage] || stage || 'New';
+}
+
+function render() {
+  const items = getFiltered();
+  const el = document.getElementById('list');
+  if (!items.length) {
+    el.innerHTML = '<div class="empty">No customers found</div>';
+    return;
+  }
+  el.innerHTML = items.map(c => {
+    const name = c.customer_name || c.display_name || c.phone;
+    const aiOn = !c.ai_disabled;
+    const matchTag = c.match_status === 'matched'
+      ? '<span class="tag">Matched</span>'
+      : '<span class="tag warn">Unmatched</span>';
+    const stageTag = '<span class="tag muted">' + stageLabel(c.relationship_stage) + '</span>';
+    const msgTag = '<span class="tag muted">' + (c.total_messages || 0) + ' msgs</span>';
+    return '<div class="card">' +
+      '<div class="avatar">' + initials(c) + '</div>' +
+      '<div class="info">' +
+        '<div class="name">' + esc(name) + '</div>' +
+        '<div class="phone">+' + esc(c.phone) + '</div>' +
+        '<div class="tags">' + matchTag + stageTag + msgTag + '</div>' +
+      '</div>' +
+      '<div class="toggle-wrap">' +
+        '<label class="toggle">' +
+          '<input type="checkbox"' + (aiOn ? ' checked' : '') +
+          ' onchange="toggleAI(\'' + c.phone + '\', this)">' +
+          '<span class="slider"></span>' +
+        '</label>' +
+        '<span class="toggle-label">' + (aiOn ? 'AI On' : 'AI Off') + '</span>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s || '';
+  return d.innerHTML;
+}
+
+async function toggleAI(phone, el) {
+  const enable = el.checked;
+  const url = enable
+    ? '/api/v1/ai/enable/' + phone
+    : '/api/v1/ai/disable/' + phone;
+  el.disabled = true;
+  try {
+    const res = await fetch(url, { method: 'POST' });
+    if (!res.ok) throw new Error(res.statusText);
+    const c = customers.find(x => x.phone === phone);
+    if (c) c.ai_disabled = enable ? 0 : 1;
+    updateStats();
+    render();
+  } catch (e) {
+    el.checked = !el.checked;
+    alert('Toggle failed: ' + e.message);
+  }
+}
+
+document.getElementById('search').addEventListener('input', render);
+document.getElementById('filter').addEventListener('change', render);
+
+loadCustomers();
+</script>
+</body>
+</html>
