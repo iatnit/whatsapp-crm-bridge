@@ -72,8 +72,6 @@
 [LOCA]: ok noted
 [LOCA]: white stone silver base right?
 [Customer]: yes
-[LOCA]: A grade or B grade?
-[Customer]: A grade
 [LOCA]: ok I check stock and tell you
 
 ### 样本3：报价（不直接给价格，先了解需求再人工报价）

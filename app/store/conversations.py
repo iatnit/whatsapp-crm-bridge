@@ -1,5 +1,7 @@
 """Conversation-level queries and customer matching updates."""
 
+import time
+
 from app.store.database import get_db
 
 
@@ -108,3 +110,58 @@ async def get_active_phones_today(since_ts: int) -> list[str]:
         )
         rows = await cursor.fetchall()
         return [row["phone"] for row in rows]
+
+
+async def get_customer_context(phone: str) -> dict:
+    """Build customer context from local SQLite data (zero API calls).
+
+    Returns a dict with:
+      is_known, customer_name, relationship_stage, total_messages, first_seen_days
+    """
+    async with get_db() as db:
+        # Conversation-level data
+        cursor = await db.execute(
+            "SELECT customer_name, match_status, total_messages, first_message_at "
+            "FROM conversations WHERE phone = ?",
+            (phone,),
+        )
+        conv = await cursor.fetchone()
+
+        if not conv:
+            return {
+                "is_known": False,
+                "customer_name": "",
+                "relationship_stage": "new",
+                "total_messages": 0,
+                "first_seen_days": 0,
+            }
+
+        total = conv["total_messages"] or 0
+        customer_name = conv["customer_name"] or ""
+        is_known = conv["match_status"] == "matched" and bool(customer_name)
+
+        # Calculate days since first contact
+        first_at = conv["first_message_at"]
+        if first_at:
+            first_ts = first_at if isinstance(first_at, (int, float)) else 0
+            first_seen_days = max(0, int((time.time() - first_ts) / 86400)) if first_ts else 0
+        else:
+            first_seen_days = 0
+
+        # Determine relationship stage
+        if total <= 2:
+            stage = "new"
+        elif total <= 10 or first_seen_days <= 3:
+            stage = "early"
+        elif total <= 50 or first_seen_days <= 30:
+            stage = "developing"
+        else:
+            stage = "established"
+
+        return {
+            "is_known": is_known,
+            "customer_name": customer_name,
+            "relationship_stage": stage,
+            "total_messages": total,
+            "first_seen_days": first_seen_days,
+        }

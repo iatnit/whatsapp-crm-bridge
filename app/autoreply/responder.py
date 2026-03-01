@@ -10,6 +10,7 @@ import httpx
 
 from app.config import settings
 from app.store.messages import get_messages_by_phone
+from app.store.conversations import get_customer_context
 from app.webhook.sender import send_text_message
 from app.autoreply.knowledge import get_knowledge_text, get_reply_style
 from app.autoreply.prompts import SYSTEM_PROMPT_TEMPLATE, USER_PROMPT_TEMPLATE
@@ -138,6 +139,26 @@ def _format_conversation(messages: list[dict]) -> str:
         if not content:
             content = f"[{msg.get('msg_type', 'unknown')}]"
         lines.append(f"[{sender}]: {content}")
+    return "\n".join(lines)
+
+
+def _format_customer_context(ctx: dict) -> str:
+    """Convert customer context dict to a concise text block for the prompt."""
+    stage = ctx["relationship_stage"]
+    total = ctx["total_messages"]
+    days = ctx["first_seen_days"]
+
+    lines = [f"CUSTOMER CONTEXT: stage={stage}, messages={total}, days={days}"]
+    if ctx["is_known"] and ctx["customer_name"]:
+        lines.append(f"CRM name: {ctx['customer_name']} (known customer)")
+    if stage == "new":
+        lines.append("→ First contact. OK to ask basic questions (product, shop/factory).")
+    elif stage == "early":
+        lines.append("→ Early contact. Check history before asking — don't repeat questions.")
+    elif stage == "developing":
+        lines.append("→ Developing relationship. Skip introductions, be direct.")
+    else:
+        lines.append("→ Established customer. Treat as a familiar friend.")
     return "\n".join(lines)
 
 
@@ -318,6 +339,15 @@ async def handle_auto_reply(
         )
         conversation_text = _format_conversation(messages)
 
+        # Build customer context from local DB
+        ctx = await get_customer_context(phone)
+        customer_context = _format_customer_context(ctx)
+        logger.info(
+            "Customer context for %s: stage=%s, msgs=%d, days=%d, known=%s",
+            phone, ctx["relationship_stage"], ctx["total_messages"],
+            ctx["first_seen_days"], ctx["is_known"],
+        )
+
         # Build prompts
         knowledge = get_knowledge_text()
         reply_style = get_reply_style()
@@ -329,6 +359,7 @@ async def handle_auto_reply(
             customer_name=customer_name,
             phone=phone,
             conversation_text=conversation_text,
+            customer_context=customer_context,
         )
 
         # Call LLM

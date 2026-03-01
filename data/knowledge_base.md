@@ -256,73 +256,12 @@ All grades use real glass rhinestones (not acrylic). AA and A grade stones are g
 
 ---
 
-## Pricing Guide
+## Pricing Guidance
 
-### DR Diamond Rope — SS4 (Price per meter, RMB)
-
-| Product | White | LCT/Color | AB | Black Diamond |
-|---------|-------|-----------|-----|---------------|
-| 3 Lines A Grade | 0.95-1.00 | 0.95-1.00 | — | — |
-| 4 Lines A Grade | 1.10-1.25 | 1.10-1.25 | 1.20-1.30 | 1.10-1.25 |
-| 4 Lines B Grade | 0.90-1.05 | 0.90-1.05 | 1.00-1.10 | — |
-| 6 Lines A Grade | — | — | 1.85 | — |
-| 9 Lines A Grade | — | — | 2.40-2.60 | — |
-| 19 Lines A Grade | — | — | 6.00 | — |
-
-### DR-14-6mm Laser Series (Price per meter, RMB)
-
-| Stone Type | A Grade | B Grade |
-|-----------|---------|---------|
-| White Stone | 1.20-1.28 | 1.01-1.15 |
-| Color Stone (LCT/Peach) | 1.25-1.38 | 1.10-1.20 |
-| AB Stone | 1.35 | 1.25 |
-
-### DR-14-7mm Laser Series
-
-| Stone Type | A Grade |
-|-----------|---------|
-| White | 1.45-1.55 |
-| Color (LCT/Peach) | 1.55-1.65 |
-| AB | 1.50-1.60 |
-
-### DS Diamond Sheet — 12.9 Model 24x40cm (Price per piece)
-
-| Color | RMB | USD (approx) |
-|-------|-----|--------------|
-| White AA | 10.0-10.4 | $1.40 |
-| LCT AA | 10.5 | $1.50 |
-| Peach AA | 11.0-11.5 | $1.60 |
-| AB AA | 11.5-12.0 | $1.70 |
-| White B Grade | 7.5 | $1.05 |
-
-### Rhinestone Rope (Price per meter/yard)
-
-| Spec | White | LCT | Peach/BD |
-|------|-------|-----|----------|
-| SS5/6-row Lace (/yard) | 2.1 | 2.2 | 2.4 |
-| SS3.5/6-row (/meter) | 1.8 | 1.8 | 1.9-2.1 |
-
-### Sample Pricing
-
-| Item | Price |
-|------|-------|
-| Sample pack (assorted) | $15 (refundable with bulk order) |
-| DHL shipping for samples | ~$25 |
-| Total sample cost | ~$40 |
-
-**Note**: Prices may vary based on order quantity, customization, and current material costs. Contact us for exact quotation.
-
----
-
-## Volume Discounts
-
-| Order Quantity | Discount |
-|---------------|----------|
-| Standard (base) | List price |
-| 500-1,000 units | -5% |
-| 1,000-2,000 units | -10% |
-| 2,000-5,000 units | -15% |
-| 5,000+ units | -20% |
+Prices vary by product, stone color, quantity, and current material costs. When a customer asks about price:
+1. First ask which product and quantity they need
+2. Then say "let me calculate the best price for you" and wait for Lucky to follow up
+3. NEVER give specific price numbers — Lucky will handle pricing personally
 
 ---
 
@@ -427,89 +366,6 @@ Our products are widely used in:
 
 ---
 
-## How to Order
-
-### Step 1: Tell us what you need
-- Product type (strips, mesh sheets, rope, etc.)
-- Stone size (SS4, SS6, etc.)
-- Color (stone color + fabric/base color)
-- Quantity
-- Quality grade (AA, A, or B)
-
-### Step 2: We provide quotation
-- Exact pricing based on your specifications
-- Available stock or production lead time
-- Shipping cost estimate
-
-### Step 3: Confirm and pay deposit
-- 30% deposit to start production
-- We send production photos for confirmation
-
-### Step 4: Balance payment and shipping
-- Pay remaining 70% before shipping
-- We ship and provide tracking number
-- Delivery to your door
-
-### Need samples first?
-- Sample pack: $15 (refundable with bulk order)
-- DHL shipping: ~$25
-- We can send 1-1-1 (one of each color) sample packets
-- Sample delivered in 5-7 days via DHL
-
----
-
-## Frequently Asked Questions
-
-### Q: Are you a factory or trading company?
-A: We are a factory! LOCA Crystal has our own production lines in Yiwu, China. Factory-direct means better prices and quality control.
-
-### Q: What is the minimum order?
-A: Standard MOQ is 1,000-2,000 meters for strips and 500 pieces for mesh sheets. But we accept smaller orders with a small price adjustment. For samples, minimum is $100.
-
-### Q: Can you send samples?
-A: Yes! We offer sample packs for $15 (refundable with your first bulk order) + $25 DHL shipping. Samples arrive in 5-7 days.
-
-### Q: Do you ship to my country?
-A: Yes, we ship worldwide! We regularly ship to India, Pakistan, Bangladesh, Middle East, Africa, Europe, USA, and South America. We can ship by sea, air cargo, or express (DHL/UPS).
-
-### Q: What is the delivery time?
-A: Stock items ship in 2-3 days. Standard production takes 7-10 days. Rush orders can be done in 5 days.
-
-### Q: Are the rhinestones real glass?
-A: Yes, all our rhinestones are real glass crystals, not plastic or acrylic. They have excellent shine and durability.
-
-### Q: Will the stones fall off?
-A: Our products use high-quality hot-melt adhesive. With proper application (correct temperature and pressure), stones will not fall off. We guarantee quality — if more than 10% of stones fall off, we provide free replacement.
-
-### Q: Do you accept custom orders?
-A: Yes! We can customize stone colors, fabric colors, sizes, patterns, and packaging. Custom mold fee ranges from 3,000-10,000 RMB depending on complexity.
-
-### Q: What is the difference between A grade and B grade?
-A: A grade uses premium stones with bright shine and strong adhesion — best for export and quality-conscious customers. B grade uses economy stones with slightly lower shine — suitable for price-sensitive markets. Both use real glass.
-
-### Q: What is the difference between DR (Diamond Rope) and DT (Diamond Trim)?
-A: DR has fabric lamination and cotton/EVA core — it's flexible like a rope, easy to bend around curves. DT has no fabric backing — it's thinner, lighter, and cheaper, but more rigid. Choose DR for curved surfaces and DT for flat surfaces.
-
-### Q: What is AB color?
-A: AB stands for Aurora Borealis — it's a special coating that creates a rainbow/iridescent effect on the rhinestone. Very popular and eye-catching, slightly more expensive than solid colors.
-
-### Q: What is LCT color?
-A: LCT stands for Light Colorado Topaz — it's a golden yellow/amber color. Very popular in the Indian market for saree and dress decoration.
-
-### Q: What is BAB?
-A: BAB is B-grade AB (Aurora Borealis) — it has the same rainbow effect but uses B-grade stones, making it more affordable.
-
-### Q: How do I apply hotfix rhinestones?
-A: Use a heat press or iron at 150-170°C for 15-20 seconds with medium pressure. For best results, use a heat press machine. Allow to cool before handling.
-
-### Q: Can I get a price list?
-A: Prices depend on specifications, quantity, and current material costs. Tell us what products you're interested in and we'll provide an exact quotation within 10 minutes.
-
-### Q: Do you have a product catalog?
-A: Yes! Send us a message and we'll share our latest product photos and videos. We can also send physical samples.
-
----
-
 ## Sales Strategy Rules (IMPORTANT — follow these strictly)
 
 ### Competitor Alert
@@ -547,17 +403,3 @@ Example question: "sure! how many meters you usually order? our factory MOQ is 5
     - Prakash: +919834390512
 - Say something like: "for smaller quantity I recommend my partner in [city], he has stock ready. his number is [number], you can contact him directly 👍"
 
----
-
-## Contact Us
-
-**LOCACRYSTAL ACCESSORIES CO., LTD**
-Factory Address: Yiwu, Zhejiang, China
-
-- **WhatsApp**: +86 18606776000
-- **Email**: lucky@locacrystal.com
-- **Contact Person**: Lucky Zhang
-
-We speak English, Chinese, and Hindi. Response time: within 1 hour during business hours (China time 9:00-22:00).
-
-Welcome to inquire! We look forward to becoming your long-term rhinestone supplier.
