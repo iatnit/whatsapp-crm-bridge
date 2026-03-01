@@ -13,13 +13,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .refresh-btn { background: rgba(255,255,255,.2); border: 1px solid rgba(255,255,255,.4); color: #fff; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; }
 .refresh-btn:hover { background: rgba(255,255,255,.3); }
 .stats { display: flex; gap: 12px; padding: 12px 20px; background: #fff; border-bottom: 1px solid #e0e0e0; flex-wrap: wrap; }
-.stat { padding: 8px 16px; border-radius: 8px; background: #f0f2f5; font-size: 14px; white-space: nowrap; cursor: pointer; transition: all .15s; user-select: none; }
-.stat:hover { background: #e0e0e0; }
-.stat.active { background: #008069; color: #fff; }
-.stat.active b { color: #fff; }
+.stat { padding: 8px 16px; border-radius: 8px; background: #f0f2f5; font-size: 14px; white-space: nowrap; }
 .stat b { color: #008069; }
 .controls { padding: 12px 20px; background: #fff; display: flex; gap: 10px; flex-wrap: wrap; border-bottom: 1px solid #e0e0e0; }
-.controls input { flex: 1; min-width: 180px; padding: 10px 14px; border: 1px solid #d1d7db; border-radius: 8px; font-size: 14px; outline: none; }
+.controls input { flex: 1; min-width: 140px; padding: 10px 14px; border: 1px solid #d1d7db; border-radius: 8px; font-size: 14px; outline: none; }
 .controls input:focus { border-color: #008069; }
 .controls select { padding: 10px 14px; border: 1px solid #d1d7db; border-radius: 8px; font-size: 14px; background: #fff; outline: none; cursor: pointer; }
 .list { padding: 12px 20px; display: grid; gap: 10px; max-width: 900px; margin: 0 auto; }
@@ -27,13 +24,18 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.12); }
 .avatar { width: 44px; height: 44px; border-radius: 50%; background: #dfe5e7; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 600; color: #667781; flex-shrink: 0; margin-top: 2px; }
 .info { flex: 1; min-width: 0; }
-.info .name-row { display: flex; align-items: center; gap: 8px; }
+.info .name-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .info .name { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .info .phone { font-size: 12px; color: #667781; margin-top: 1px; }
 .tags { display: flex; gap: 4px; margin-top: 6px; flex-wrap: wrap; }
 .tag { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #e7f7ef; color: #008069; }
 .tag.warn { background: #fff3cd; color: #856404; }
 .tag.muted { background: #f0f2f5; color: #667781; }
+/* Status badges (inline after name) */
+.badge { font-size: 10px; padding: 2px 7px; border-radius: 4px; font-weight: 600; flex-shrink: 0; }
+.badge.ai-on { background: #dcfce7; color: #166534; }
+.badge.ai-off { background: #f3f4f6; color: #6b7280; }
+.badge.big { background: #fef3c7; color: #92400e; }
 /* Source badges */
 .source-badge { font-size: 10px; padding: 2px 7px; border-radius: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: .3px; flex-shrink: 0; }
 .source-badge.both { background: #dcfce7; color: #166534; }
@@ -57,24 +59,18 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .tag-dropdown { position: absolute; top: 100%; left: 0; background: #fff; border: 1px solid #d1d7db; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,.15); z-index: 20; min-width: 150px; margin-top: 4px; }
 .tag-dropdown div { padding: 8px 12px; font-size: 12px; cursor: pointer; }
 .tag-dropdown div:hover { background: #f0f2f5; }
-.toggle-wrap { flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; margin-top: 2px; }
-.toggle-label { font-size: 10px; color: #667781; }
-.toggle { position: relative; width: 44px; height: 24px; cursor: pointer; }
+/* Right-side toggles */
+.toggles { flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: 2px; }
+.toggle-row { display: flex; align-items: center; gap: 6px; }
+.toggle-row .tl { font-size: 10px; color: #667781; width: 24px; text-align: right; }
+.toggle { position: relative; width: 36px; height: 20px; cursor: pointer; }
 .toggle input { opacity: 0; width: 0; height: 0; }
-.toggle .slider { position: absolute; inset: 0; background: #ccc; border-radius: 24px; transition: .2s; }
-.toggle .slider::before { content: ''; position: absolute; width: 18px; height: 18px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: .2s; }
+.toggle .slider { position: absolute; inset: 0; background: #ccc; border-radius: 20px; transition: .2s; }
+.toggle .slider::before { content: ''; position: absolute; width: 16px; height: 16px; left: 2px; bottom: 2px; background: #fff; border-radius: 50%; transition: .2s; }
 .toggle input:checked + .slider { background: #25d366; }
-.toggle input:checked + .slider::before { transform: translateX(20px); }
+.toggle input:checked + .slider::before { transform: translateX(16px); }
 .toggle input:disabled + .slider { opacity: .5; cursor: wait; }
-/* Big customer inline toggle */
-.big-toggle { display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; flex-shrink: 0; }
-.big-toggle label { position: relative; width: 32px; height: 18px; cursor: pointer; display: inline-block; }
-.big-toggle input { opacity: 0; width: 0; height: 0; }
-.big-toggle .sl { position: absolute; inset: 0; background: #ccc; border-radius: 18px; transition: .2s; }
-.big-toggle .sl::before { content: ''; position: absolute; width: 14px; height: 14px; left: 2px; bottom: 2px; background: #fff; border-radius: 50%; transition: .2s; }
-.big-toggle input:checked + .sl { background: #f59e0b; }
-.big-toggle input:checked + .sl::before { transform: translateX(14px); }
-.big-toggle span.bl { font-size: 10px; color: #92400e; font-weight: 600; }
+.toggle.big-t input:checked + .slider { background: #f59e0b; }
 .empty { text-align: center; padding: 60px 20px; color: #667781; }
 .loading { text-align: center; padding: 60px 20px; color: #667781; }
 .pagination { display: flex; justify-content: center; align-items: center; gap: 12px; padding: 14px 20px; max-width: 900px; margin: 0 auto; }
@@ -103,25 +99,33 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 </div>
 
 <div class="stats" id="stats">
-  <div class="stat active" data-filter="all" onclick="setStatFilter(this)">Total: <b id="s-total">-</b></div>
-  <div class="stat" data-filter="ai-on" onclick="setStatFilter(this)">AI On: <b id="s-on">-</b></div>
-  <div class="stat" data-filter="ai-off" onclick="setStatFilter(this)">AI Off: <b id="s-off">-</b></div>
-  <div class="stat" data-filter="big" onclick="setStatFilter(this)">Big: <b id="s-big">-</b></div>
-  <div class="stat" data-filter="both" onclick="setStatFilter(this)">Both: <b id="s-both">-</b></div>
-  <div class="stat" data-filter="hubspot-only" onclick="setStatFilter(this)">HubSpot: <b id="s-hs">-</b></div>
-  <div class="stat" data-filter="local-only" onclick="setStatFilter(this)">Local: <b id="s-local">-</b></div>
+  <div class="stat">Total: <b id="s-total">-</b></div>
+  <div class="stat">AI On: <b id="s-on">-</b></div>
+  <div class="stat">AI Off: <b id="s-off">-</b></div>
+  <div class="stat">Big: <b id="s-big">-</b></div>
+  <div class="stat">Both: <b id="s-both">-</b></div>
+  <div class="stat">HubSpot: <b id="s-hs">-</b></div>
+  <div class="stat">Local: <b id="s-local">-</b></div>
 </div>
 
 <div class="controls">
   <input type="text" id="search" placeholder="Search name or phone...">
-  <select id="filter">
-    <option value="all">All</option>
-    <option value="ai-on">AI On</option>
-    <option value="ai-off">AI Off</option>
+  <select id="f-source">
+    <option value="all">Source: All</option>
+    <option value="both">Both</option>
+    <option value="hubspot">HubSpot</option>
+    <option value="local">Local</option>
+  </select>
+  <select id="f-ai">
+    <option value="all">AI: All</option>
+    <option value="on">AI On</option>
+    <option value="off">AI Off</option>
+  </select>
+  <select id="f-type">
+    <option value="all">Type: All</option>
+    <option value="big">Big Only</option>
     <option value="matched">Matched</option>
     <option value="unmatched">Unmatched</option>
-    <option value="hubspot-only">HubSpot Only</option>
-    <option value="local-only">Local Only</option>
     <option value="has-tags">Has Tags</option>
   </select>
 </div>
@@ -140,24 +144,10 @@ const TAG_OPTIONS = ['hot_lead', 'vip', 'repeat_buyer', 'first_timer', 'price_sh
 const TAG_LABELS = { hot_lead: 'Hot Lead', vip: 'VIP', repeat_buyer: 'Repeat Buyer', first_timer: 'First Timer', price_shopper: 'Price Shopper', risky: 'Risky', agent_potential: 'Agent Potential' };
 
 let customers = [];
-let openDropdown = null; // phone of currently open dropdown
+let openDropdown = null;
 let currentPage = 1;
-let activeStatFilter = 'all';
 const PAGE_SIZE = 50;
 const SOURCE_ORDER = { both: 0, hubspot: 1, local: 2 };
-
-function setStatFilter(el) {
-  const f = el.dataset.filter;
-  activeStatFilter = (activeStatFilter === f && f !== 'all') ? 'all' : f;
-  // Sync dropdown: set to matching value or reset to "all"
-  const select = document.getElementById('filter');
-  select.value = (activeStatFilter !== 'both') ? activeStatFilter : 'all';
-  // Update active class
-  document.querySelectorAll('.stat').forEach(s => s.classList.remove('active'));
-  document.querySelector('.stat[data-filter="' + activeStatFilter + '"]').classList.add('active');
-  currentPage = 1;
-  render();
-}
 
 async function loadCustomers() {
   try {
@@ -205,30 +195,25 @@ function updateStats() {
 
 function getFiltered() {
   const q = document.getElementById('search').value.toLowerCase().trim();
-  const f = document.getElementById('filter').value;
-  const sf = activeStatFilter;
+  const fSource = document.getElementById('f-source').value;
+  const fAi = document.getElementById('f-ai').value;
+  const fType = document.getElementById('f-type').value;
   return customers.filter(c => {
+    // Text search
     if (q) {
-      const hay = (c.display_name + ' ' + c.customer_name + ' ' + c.phone + ' ' + (c.customer_tags || '')).toLowerCase();
+      const hay = ((c.display_name || '') + ' ' + (c.customer_name || '') + ' ' + (c.phone || '') + ' ' + (c.customer_tags || '')).toLowerCase();
       if (!hay.includes(q)) return false;
     }
-    // Stat filter (handles "both" and "big" which dropdown doesn't have)
-    if (sf === 'ai-on' && c.ai_disabled) return false;
-    if (sf === 'ai-off' && !c.ai_disabled) return false;
-    if (sf === 'big' && !c.is_big_customer) return false;
-    if (sf === 'both' && c.source !== 'both') return false;
-    if (sf === 'hubspot-only' && c.source !== 'hubspot') return false;
-    if (sf === 'local-only' && c.source !== 'local') return false;
-    // Dropdown filter (for matched/unmatched/has-tags)
-    if (f !== 'all' && sf === 'all') {
-      if (f === 'ai-on' && c.ai_disabled) return false;
-      if (f === 'ai-off' && !c.ai_disabled) return false;
-      if (f === 'matched' && c.match_status !== 'matched') return false;
-      if (f === 'unmatched' && c.match_status !== 'unmatched') return false;
-      if (f === 'hubspot-only' && c.source !== 'hubspot') return false;
-      if (f === 'local-only' && c.source !== 'local') return false;
-      if (f === 'has-tags' && !c.customer_tags) return false;
-    }
+    // Source filter
+    if (fSource !== 'all' && c.source !== fSource) return false;
+    // AI filter
+    if (fAi === 'on' && c.ai_disabled) return false;
+    if (fAi === 'off' && !c.ai_disabled) return false;
+    // Type filter
+    if (fType === 'big' && !c.is_big_customer) return false;
+    if (fType === 'matched' && c.match_status !== 'matched') return false;
+    if (fType === 'unmatched' && c.match_status !== 'unmatched') return false;
+    if (fType === 'has-tags' && !c.customer_tags) return false;
     return true;
   });
 }
@@ -245,7 +230,7 @@ function stageLabel(stage) {
 
 function sourceBadge(source) {
   if (source === 'both') return '<span class="source-badge both">Both</span>';
-  if (source === 'hubspot') return '<span class="source-badge hubspot">HS Only</span>';
+  if (source === 'hubspot') return '<span class="source-badge hubspot">HubSpot</span>';
   return '<span class="source-badge local">Local</span>';
 }
 
@@ -283,7 +268,6 @@ function render() {
   }
   const start = (currentPage - 1) * PAGE_SIZE;
   const items = allItems.slice(start, start + PAGE_SIZE);
-  // Update pagination bar
   pagEl.style.display = 'flex';
   document.getElementById('page-info').textContent =
     'Page ' + currentPage + ' of ' + totalPages + ' (' + allItems.length + ' total)';
@@ -296,16 +280,11 @@ function render() {
     const isBig = c.is_big_customer;
     const isHsOnly = c.source === 'hubspot';
 
-    // Big customer toggle (inline, next to name)
-    let bigHtml = '';
-    if (!isHsOnly) {
-      bigHtml = '<div class="big-toggle">' +
-        '<label><input type="checkbox"' + (isBig ? ' checked' : '') +
-        ' onchange="toggleBig(\'' + c.phone + '\', this)">' +
-        '<span class="sl"></span></label>' +
-        (isBig ? '<span class="bl">Big</span>' : '') +
-      '</div>';
-    }
+    // Status badges after name
+    const aiBadge = aiOn
+      ? '<span class="badge ai-on">AI On</span>'
+      : '<span class="badge ai-off">AI Off</span>';
+    const bigBadge = isBig ? '<span class="badge big">Big</span>' : '';
 
     const matchTag = c.match_status === 'matched'
       ? '<span class="tag">Matched</span>'
@@ -315,15 +294,26 @@ function render() {
     const stageTag = c.relationship_stage ? '<span class="tag muted">' + stageLabel(c.relationship_stage) + '</span>' : '';
     const msgTag = c.total_messages ? '<span class="tag muted">' + c.total_messages + ' msgs</span>' : '';
 
-    let toggleHtml = '';
+    // Right-side toggles (only for local/both contacts)
+    let togglesHtml = '';
     if (!isHsOnly) {
-      toggleHtml = '<div class="toggle-wrap">' +
-        '<label class="toggle">' +
-          '<input type="checkbox"' + (aiOn ? ' checked' : '') +
-          ' onchange="toggleAI(\'' + c.phone + '\', this)">' +
-          '<span class="slider"></span>' +
-        '</label>' +
-        '<span class="toggle-label">' + (aiOn ? 'AI On' : 'AI Off') + '</span>' +
+      togglesHtml = '<div class="toggles">' +
+        '<div class="toggle-row">' +
+          '<span class="tl">AI</span>' +
+          '<label class="toggle">' +
+            '<input type="checkbox"' + (aiOn ? ' checked' : '') +
+            ' onchange="toggleAI(\'' + c.phone + '\', this)">' +
+            '<span class="slider"></span>' +
+          '</label>' +
+        '</div>' +
+        '<div class="toggle-row">' +
+          '<span class="tl">Big</span>' +
+          '<label class="toggle big-t">' +
+            '<input type="checkbox"' + (isBig ? ' checked' : '') +
+            ' onchange="toggleBig(\'' + c.phone + '\', this)">' +
+            '<span class="slider"></span>' +
+          '</label>' +
+        '</div>' +
       '</div>';
     }
 
@@ -332,15 +322,14 @@ function render() {
       '<div class="info">' +
         '<div class="name-row">' +
           '<div class="name">' + esc(name) + '</div>' +
-          bigHtml +
-          sourceBadge(c.source) +
+          aiBadge + bigBadge + sourceBadge(c.source) +
         '</div>' +
         '<div class="phone">+' + esc(c.phone) + '</div>' +
         '<div class="tags">' + matchTag + stageTag + msgTag + '</div>' +
         hsPropsHtml(c) +
         ctagsHtml(c) +
       '</div>' +
-      toggleHtml +
+      togglesHtml +
     '</div>';
   }).join('');
 }
@@ -355,7 +344,6 @@ function esc(s) {
 
 function showTagDropdown(event, phone) {
   event.stopPropagation();
-  // Close any existing dropdown
   closeTagDropdown();
 
   const c = customers.find(x => x.phone === phone);
@@ -398,7 +386,6 @@ async function saveTags(phone, tagsArray) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || res.statusText);
     }
-    // Update local state on success
     const c = customers.find(x => x.phone === phone);
     if (c) c.customer_tags = tagsStr;
     render();
@@ -424,7 +411,7 @@ function removeTag(phone, tag) {
   saveTags(phone, existing);
 }
 
-// ── AI toggle ────────────────────────────────────────────────────
+// ── Toggles ─────────────────────────────────────────────────────
 
 async function toggleAI(phone, el) {
   const enable = el.checked;
@@ -467,14 +454,11 @@ async function toggleBig(phone, el) {
 function prevPage() { if (currentPage > 1) { currentPage--; render(); window.scrollTo(0, 0); } }
 function nextPage() { currentPage++; render(); window.scrollTo(0, 0); }
 
-document.getElementById('search').addEventListener('input', () => { currentPage = 1; render(); });
-document.getElementById('filter').addEventListener('change', () => {
-  activeStatFilter = 'all';
-  document.querySelectorAll('.stat').forEach(s => s.classList.remove('active'));
-  document.querySelector('.stat[data-filter="all"]').classList.add('active');
-  currentPage = 1;
-  render();
-});
+function onFilterChange() { currentPage = 1; render(); }
+document.getElementById('search').addEventListener('input', onFilterChange);
+document.getElementById('f-source').addEventListener('change', onFilterChange);
+document.getElementById('f-ai').addEventListener('change', onFilterChange);
+document.getElementById('f-type').addEventListener('change', onFilterChange);
 
 loadCustomers();
 </script>
