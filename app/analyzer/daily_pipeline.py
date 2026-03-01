@@ -1,5 +1,6 @@
 """Daily analysis pipeline: aggregate → analyze → write to Feishu & HubSpot."""
 
+import asyncio
 import json
 import logging
 from datetime import datetime, timedelta, timezone
@@ -191,197 +192,210 @@ async def run_daily_pipeline() -> dict:
     }
     logger.info("Grouped into %d conversations", len(grouped))
 
-    # Step 4 & 5: Analyze each conversation and write to Feishu
+    # Step 4 & 5: Analyze each conversation and write to Feishu/HubSpot (concurrent)
     conversations_db = {c["phone"]: c for c in await get_all_conversations()}
 
-    analyzed_count = 0
-    written_count = 0
     errors: list[str] = []
     results: list[dict] = []
 
     # Load analysis cache (reuse if LLM succeeded but CRM writes failed last run)
     analysis_cache = _load_analysis_cache()
 
-    for phone, msgs in grouped.items():
-        conv = conversations_db.get(phone, {})
-        display_name = conv.get("display_name", "") or msgs[0].get("display_name", "")
-        customer_name = conv.get("customer_name", "") or display_name or phone
+    # Semaphore limits concurrent LLM + CRM calls
+    sem = asyncio.Semaphore(settings.pipeline_concurrency)
 
-        logger.info("Analyzing %s (%s) — %d messages", customer_name, phone, len(msgs))
+    async def _process_one(phone: str, msgs: list[dict]) -> dict | None:
+        """Process a single conversation: analyze → Feishu → Obsidian → HubSpot."""
+        async with sem:
+            conv = conversations_db.get(phone, {})
+            display_name = conv.get("display_name", "") or msgs[0].get("display_name", "")
+            customer_name = conv.get("customer_name", "") or display_name or phone
 
-        # Try cached analysis first (from previous run where CRM writes failed)
-        analysis = analysis_cache.pop(phone, None)
-        if analysis:
-            logger.info("Using cached analysis for %s (skipping LLM call)", customer_name)
-        else:
-            analysis = await analyze_conversation(msgs, customer_name, phone)
-        if not analysis:
-            errors.append(f"Analysis failed for {customer_name} ({phone})")
-            continue
-        analyzed_count += 1
+            logger.info("Analyzing %s (%s) — %d messages", customer_name, phone, len(msgs))
 
-        # Determine customer name (shared by Feishu + HubSpot)
-        # Priority: matched CRM name > Claude analysis name > display_name > phone
-        matched_name = conv.get("customer_name", "")
-        claude_name = analysis.get("customer_info", {}).get("name", "")
-        feishu_name = matched_name or claude_name or display_name or phone
-        location = analysis.get("customer_info", {}).get("location", "")
+            # Try cached analysis first (from previous run where CRM writes failed)
+            analysis = analysis_cache.pop(phone, None)
+            if analysis:
+                logger.info("Using cached analysis for %s (skipping LLM call)", customer_name)
+            else:
+                analysis = await analyze_conversation(msgs, customer_name, phone)
+            if not analysis:
+                errors.append(f"Analysis failed for {customer_name} ({phone})")
+                return None
 
-        # Write to Feishu
-        feishu_ok = False
-        record_id = None
-        try:
-            record_id = await ensure_customer(
-                feishu_name, phone=phone, location=location,
-                contact_person=display_name,
-            )
-        except Exception as e:
-            logger.error("Feishu ensure_customer error for %s: %s", customer_name, e)
-            errors.append(f"Feishu customer error for {customer_name}: {e}")
-            await enqueue("feishu", "ensure_customer", {
-                "name": feishu_name, "phone": phone,
-                "location": location, "contact_person": display_name,
-            }, str(e))
+            # Determine customer name (shared by Feishu + HubSpot)
+            matched_name = conv.get("customer_name", "")
+            claude_name = analysis.get("customer_info", {}).get("name", "")
+            feishu_name = matched_name or claude_name or display_name or phone
+            location = analysis.get("customer_info", {}).get("location", "")
 
-        if not record_id:
-            if record_id is None and not errors[-1:]:
-                errors.append(f"Failed to create/find Feishu customer for {feishu_name}")
+            # Write to Feishu
+            feishu_ok = False
+            record_id = None
+            try:
+                record_id = await ensure_customer(
+                    feishu_name, phone=phone, location=location,
+                    contact_person=display_name,
+                )
+            except Exception as e:
+                logger.error("Feishu ensure_customer error for %s: %s", customer_name, e)
+                errors.append(f"Feishu customer error for {customer_name}: {e}")
                 await enqueue("feishu", "ensure_customer", {
                     "name": feishu_name, "phone": phone,
                     "location": location, "contact_person": display_name,
-                }, "record_id was None")
-        else:
-            # Update match_status if conversation was unmatched
-            match_status = conv.get("match_status", "")
-            if match_status in ("unmatched", "", None):
-                await update_customer_match(
-                    phone, record_id, feishu_name, "auto_created"
-                )
-                logger.info("Auto-created customer '%s' for %s", feishu_name, phone)
-            try:
-                followup_id = await ensure_followup(
-                    customer_record_id=record_id,
-                    customer_name=feishu_name,
-                    title=analysis.get("followup_title", "WhatsApp沟通"),
-                    detail=analysis.get("summary", ""),
-                    summary=analysis.get("summary", ""),
-                    method="WhatsApp沟通",
-                    image_paths=None,
-                )
-                if followup_id:
-                    written_count += 1
-                    feishu_ok = True
-                    logger.info("Feishu followup created: %s for %s", followup_id, feishu_name)
-                else:
-                    errors.append(f"Failed to create followup for {feishu_name}")
-            except Exception as e:
-                logger.error("Feishu ensure_followup error for %s: %s", customer_name, e)
-                errors.append(f"Feishu followup error for {customer_name}: {e}")
-
-        # Obsidian 详细总结（fire-and-forget）
-        try:
-            from app.writers.obsidian_forwarder import forward_summary_to_obsidian
-            customer_info = analysis.get("customer_info", {})
-            feishu_number = ""
-            if record_id:
-                feishu_number = get_customer_number(record_id) or ""
-            # Normalize next_actions: LLM returns dict {today, tomorrow, pending_customer}
-            raw_actions = analysis.get("next_actions", [])
-            if isinstance(raw_actions, dict):
-                action_list = []
-                for key, label in [("today", ""), ("tomorrow", "明天: "), ("pending_customer", "(waiting) ")]:
-                    val = raw_actions.get(key, "")
-                    if val:
-                        action_list.append(f"{label}{val}")
-                raw_actions = action_list
-
-            await forward_summary_to_obsidian(
-                customer_name=feishu_name,
-                phone=phone,
-                display_name=display_name,
-                feishu_id=str(feishu_number),
-                location=location,
-                language=customer_info.get("language", ""),
-                summary=analysis.get("summary", ""),
-                demand_summary=analysis.get("demand_summary", ""),
-                followup_title=analysis.get("followup_title", ""),
-                followup_detail=analysis.get("followup_detail", ""),
-                recommended_codes=analysis.get("recommended_codes", []),
-                next_actions=raw_actions,
-                tags=analysis.get("tags", []),
-                date=datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d"),
-            )
-        except Exception as e:
-            logger.warning("Obsidian summary forward failed for %s: %s", customer_name, e)
-
-        # HubSpot 写入（独立于飞书，互不阻塞）
-        hubspot_written = False
-        hs_contact_id = None
-        if settings.hubspot_enabled:
-            try:
-                total_msgs = conv.get("total_messages", 0) or len(msgs)
-                hs_extra = build_hubspot_properties(analysis, phone, total_messages=total_msgs)
-
-                # P3: Sync Feishu 编号 → HubSpot feishu_customer_id
-                if record_id:
-                    feishu_number = get_customer_number(record_id)
-                    if feishu_number:
-                        hs_extra["feishu_customer_id"] = feishu_number
-
-                hs_contact_id = await hubspot_ensure_contact(
-                    phone, name=feishu_name, country=location, extra=hs_extra)
-                if hs_contact_id:
-                    # P3: Store HubSpot contact ID in conversations table
-                    await update_hubspot_id(phone, hs_contact_id)
-
-                    hs_note_id = await hubspot_ensure_note(
-                        hs_contact_id, phone,
-                        title=analysis.get("followup_title", "WhatsApp沟通"),
-                        detail=analysis.get("followup_detail", ""),
-                        summary=analysis.get("summary", ""))
-                    hubspot_written = bool(hs_note_id)
-            except Exception as e:
-                logger.error("HubSpot error for %s: %s", customer_name, e)
-                await enqueue("hubspot", "ensure_contact", {
-                    "phone": phone, "name": feishu_name, "country": location,
                 }, str(e))
 
-        # HubSpot Deal 创建（当LLM检测到确认订单时）
-        order_info = analysis.get("order_info", {})
-        if order_info.get("order_confirmed") and settings.hubspot_enabled and hs_contact_id:
+            if not record_id:
+                if record_id is None and not errors[-1:]:
+                    errors.append(f"Failed to create/find Feishu customer for {feishu_name}")
+                    await enqueue("feishu", "ensure_customer", {
+                        "name": feishu_name, "phone": phone,
+                        "location": location, "contact_person": display_name,
+                    }, "record_id was None")
+            else:
+                match_status = conv.get("match_status", "")
+                if match_status in ("unmatched", "", None):
+                    await update_customer_match(
+                        phone, record_id, feishu_name, "auto_created"
+                    )
+                    logger.info("Auto-created customer '%s' for %s", feishu_name, phone)
+                try:
+                    followup_id = await ensure_followup(
+                        customer_record_id=record_id,
+                        customer_name=feishu_name,
+                        title=analysis.get("followup_title", "WhatsApp沟通"),
+                        detail=analysis.get("summary", ""),
+                        summary=analysis.get("summary", ""),
+                        method="WhatsApp沟通",
+                        image_paths=None,
+                    )
+                    if followup_id:
+                        feishu_ok = True
+                        logger.info("Feishu followup created: %s for %s", followup_id, feishu_name)
+                    else:
+                        errors.append(f"Failed to create followup for {feishu_name}")
+                except Exception as e:
+                    logger.error("Feishu ensure_followup error for %s: %s", customer_name, e)
+                    errors.append(f"Feishu followup error for {customer_name}: {e}")
+
+            # Obsidian 详细总结（fire-and-forget）
             try:
-                order_desc = order_info.get("order_description", "")
-                order_products = order_info.get("order_products", [])
-                deal_name = f"{feishu_name} - {order_desc or ', '.join(order_products) or 'WhatsApp订单'}"
-                deal_id = await hubspot_ensure_deal(
-                    contact_id=hs_contact_id,
-                    deal_name=deal_name,
-                    stage="closedwon",
+                from app.writers.obsidian_forwarder import forward_summary_to_obsidian
+                customer_info = analysis.get("customer_info", {})
+                feishu_number = ""
+                if record_id:
+                    feishu_number = get_customer_number(record_id) or ""
+                raw_actions = analysis.get("next_actions", [])
+                if isinstance(raw_actions, dict):
+                    action_list = []
+                    for key, label in [("today", ""), ("tomorrow", "明天: "), ("pending_customer", "(waiting) ")]:
+                        val = raw_actions.get(key, "")
+                        if val:
+                            action_list.append(f"{label}{val}")
+                    raw_actions = action_list
+
+                await forward_summary_to_obsidian(
+                    customer_name=feishu_name,
+                    phone=phone,
+                    display_name=display_name,
+                    feishu_id=str(feishu_number),
+                    location=location,
+                    language=customer_info.get("language", ""),
+                    summary=analysis.get("summary", ""),
+                    demand_summary=analysis.get("demand_summary", ""),
+                    followup_title=analysis.get("followup_title", ""),
+                    followup_detail=analysis.get("followup_detail", ""),
+                    recommended_codes=analysis.get("recommended_codes", []),
+                    next_actions=raw_actions,
+                    tags=analysis.get("tags", []),
+                    date=datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d"),
                 )
-                if deal_id:
-                    logger.info("HubSpot deal created: %s for %s", deal_id, feishu_name)
-                    # Also update customer stage to ordered
-                    from app.writers.hubspot_writer import update_contact
-                    await update_contact(hs_contact_id, extra={"customer_stage": "ordered"})
             except Exception as e:
-                logger.error("HubSpot deal creation error for %s: %s", customer_name, e)
+                logger.warning("Obsidian summary forward failed for %s: %s", customer_name, e)
 
-        results.append({
-            "phone": phone,
-            "customer_name": customer_name,
-            "analysis": analysis,
-            "feishu_written": feishu_ok,
-            "hubspot_written": hubspot_written,
-        })
+            # HubSpot 写入
+            hubspot_written = False
+            hs_contact_id = None
+            if settings.hubspot_enabled:
+                try:
+                    total_msgs = conv.get("total_messages", 0) or len(msgs)
+                    hs_extra = build_hubspot_properties(analysis, phone, total_messages=total_msgs)
 
-        # Mark processed only if at least one CRM write succeeded
-        if feishu_ok or hubspot_written:
-            msg_ids = [m["id"] for m in msgs]
-            await mark_processed(msg_ids)
-        else:
-            # Cache analysis to avoid re-calling LLM next run
-            analysis_cache[phone] = analysis
-            logger.warning("Skipping mark_processed for %s — no CRM write succeeded (analysis cached)", customer_name)
+                    if record_id:
+                        feishu_number = get_customer_number(record_id)
+                        if feishu_number:
+                            hs_extra["feishu_customer_id"] = feishu_number
+
+                    hs_contact_id = await hubspot_ensure_contact(
+                        phone, name=feishu_name, country=location, extra=hs_extra)
+                    if hs_contact_id:
+                        await update_hubspot_id(phone, hs_contact_id)
+                        hs_note_id = await hubspot_ensure_note(
+                            hs_contact_id, phone,
+                            title=analysis.get("followup_title", "WhatsApp沟通"),
+                            detail=analysis.get("followup_detail", ""),
+                            summary=analysis.get("summary", ""))
+                        hubspot_written = bool(hs_note_id)
+                except Exception as e:
+                    logger.error("HubSpot error for %s: %s", customer_name, e)
+                    await enqueue("hubspot", "ensure_contact", {
+                        "phone": phone, "name": feishu_name, "country": location,
+                    }, str(e))
+
+            # HubSpot Deal
+            order_info = analysis.get("order_info", {})
+            if order_info.get("order_confirmed") and settings.hubspot_enabled and hs_contact_id:
+                try:
+                    order_desc = order_info.get("order_description", "")
+                    order_products = order_info.get("order_products", [])
+                    deal_name = f"{feishu_name} - {order_desc or ', '.join(order_products) or 'WhatsApp订单'}"
+                    deal_id = await hubspot_ensure_deal(
+                        contact_id=hs_contact_id,
+                        deal_name=deal_name,
+                        stage="closedwon",
+                    )
+                    if deal_id:
+                        logger.info("HubSpot deal created: %s for %s", deal_id, feishu_name)
+                        from app.writers.hubspot_writer import update_contact
+                        await update_contact(hs_contact_id, extra={"customer_stage": "ordered"})
+                except Exception as e:
+                    logger.error("HubSpot deal creation error for %s: %s", customer_name, e)
+
+            result = {
+                "phone": phone,
+                "customer_name": customer_name,
+                "analysis": analysis,
+                "feishu_written": feishu_ok,
+                "hubspot_written": hubspot_written,
+            }
+
+            # Mark processed only if at least one CRM write succeeded
+            if feishu_ok or hubspot_written:
+                msg_ids = [m["id"] for m in msgs]
+                await mark_processed(msg_ids)
+            else:
+                analysis_cache[phone] = analysis
+                logger.warning("Skipping mark_processed for %s — no CRM write succeeded (analysis cached)", customer_name)
+
+            return result
+
+    # Launch all conversations concurrently (bounded by semaphore)
+    tasks = [_process_one(phone, msgs) for phone, msgs in grouped.items()]
+    task_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    analyzed_count = 0
+    written_count = 0
+    for r in task_results:
+        if isinstance(r, Exception):
+            errors.append(f"Unexpected pipeline error: {r}")
+            logger.error("Pipeline task exception: %s", r)
+            continue
+        if r is None:
+            continue
+        results.append(r)
+        analyzed_count += 1
+        if r.get("feishu_written"):
+            written_count += 1
 
     # Persist remaining cached analyses (only for phones that failed)
     _save_analysis_cache(analysis_cache)

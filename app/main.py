@@ -17,6 +17,11 @@ from app.webhook.router import router as webhook_router
 from app.analyzer.daily_pipeline import run_daily_pipeline
 from app.writers.report_writer import generate_daily_report
 
+# ── Pipeline status tracking ─────────────────────────────────────────
+_app_start_time: float = 0.0
+_last_pipeline_at: str = ""
+_last_pipeline_ok: bool = True
+
 # ── Logging ──────────────────────────────────────────────────────────
 
 logging.basicConfig(
@@ -55,6 +60,7 @@ scheduler = AsyncIOScheduler()
 
 async def scheduled_daily_analysis():
     """Cron job: run the full pipeline and generate a report."""
+    global _last_pipeline_at, _last_pipeline_ok
     logger.info("Scheduled daily analysis triggered")
     try:
         summary = await run_daily_pipeline()
@@ -62,6 +68,8 @@ async def scheduled_daily_analysis():
         unmatched = await get_unmatched_conversations()
         report = generate_daily_report(summary, unmatched=unmatched)
         logger.info("Daily report:\n%s", report)
+        _last_pipeline_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        _last_pipeline_ok = not summary.get("errors")
 
         # Write report to Feishu CEO日报 Base
         try:
@@ -70,6 +78,8 @@ async def scheduled_daily_analysis():
         except Exception as e:
             logger.warning("CEO日报 write failed (non-blocking): %s", e)
     except Exception:
+        _last_pipeline_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        _last_pipeline_ok = False
         logger.exception("Daily analysis failed")
 
 
@@ -78,6 +88,8 @@ async def scheduled_daily_analysis():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
+    global _app_start_time
+    _app_start_time = time.time()
     await init_db()
 
     # Hourly interval pipeline (if enabled)
@@ -149,12 +161,38 @@ app.include_router(webhook_router)
 @app.get("/health")
 async def health():
     from app.store.database import get_db
+    db_ok = False
     try:
         async with get_db() as db:
             await db.execute("SELECT 1")
-        return {"status": "ok", "db": "ok"}
+        db_ok = True
     except Exception:
-        return JSONResponse({"status": "error", "db": "failed"}, status_code=503)
+        pass
+
+    uptime_s = int(time.time() - _app_start_time) if _app_start_time else 0
+    hours, remainder = divmod(uptime_s, 3600)
+    minutes, seconds = divmod(remainder, 60)
+
+    result = {
+        "status": "ok" if db_ok else "degraded",
+        "version": app.version,
+        "uptime": f"{hours}h{minutes}m{seconds}s",
+        "db": "ok" if db_ok else "failed",
+        "pipeline": {
+            "last_run": _last_pipeline_at or None,
+            "last_ok": _last_pipeline_ok,
+            "concurrency": settings.pipeline_concurrency,
+            "interval_hours": settings.pipeline_interval_hours,
+        },
+        "services": {
+            "hubspot": settings.hubspot_enabled,
+            "obsidian_sync": settings.obsidian_sync_enabled,
+            "auto_reply": settings.auto_reply_enabled,
+            "llm_provider": settings.llm_provider,
+        },
+    }
+    status_code = 200 if db_ok else 503
+    return JSONResponse(result, status_code=status_code)
 
 
 @app.post("/api/v1/analyze/trigger", dependencies=[Depends(verify_admin)])

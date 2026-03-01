@@ -86,6 +86,18 @@ async def _headers() -> dict:
     return {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
 
+# Token-expired error codes from Feishu API
+_TOKEN_EXPIRED_CODES = {99991663, 99991664, 99991668}
+
+
+async def _force_refresh_token() -> None:
+    """Force-clear cached token so next _headers() call fetches a new one."""
+    global _token, _token_expires_at
+    async with _token_lock:
+        _token = ""
+        _token_expires_at = 0
+
+
 # ── Generic Bitable helpers ──────────────────────────────────────────
 
 async def _search_records(
@@ -113,8 +125,14 @@ async def _search_records(
     }
 
     client = _get_http()
-    resp = await client.post(url, json=payload, headers=await _headers())
-    data = resp.json()
+    for attempt in range(2):
+        resp = await client.post(url, json=payload, headers=await _headers())
+        data = resp.json()
+        if data.get("code") in _TOKEN_EXPIRED_CODES and attempt == 0:
+            logger.warning("Feishu token expired on search, refreshing...")
+            await _force_refresh_token()
+            continue
+        break
 
     if data.get("code") != 0:
         logger.error("Feishu search error: %s", data.get("msg"))
@@ -135,12 +153,14 @@ async def _create_record(
     url = f"{BASE_URL}/bitable/v1/apps/{app_token}/tables/{table_id}/records"
 
     client = _get_http()
-    resp = await client.post(
-        url,
-        json={"fields": fields},
-        headers=await _headers(),
-    )
-    data = resp.json()
+    for attempt in range(2):
+        resp = await client.post(url, json={"fields": fields}, headers=await _headers())
+        data = resp.json()
+        if data.get("code") in _TOKEN_EXPIRED_CODES and attempt == 0:
+            logger.warning("Feishu token expired on create, refreshing...")
+            await _force_refresh_token()
+            continue
+        break
 
     if data.get("code") != 0:
         logger.error("Feishu create error in %s: %s", table_id, data.get("msg"))
@@ -163,12 +183,14 @@ async def _update_record(
     url = f"{BASE_URL}/bitable/v1/apps/{app_token}/tables/{table_id}/records/{record_id}"
 
     client = _get_http()
-    resp = await client.put(
-        url,
-        json={"fields": fields},
-        headers=await _headers(),
-    )
-    data = resp.json()
+    for attempt in range(2):
+        resp = await client.put(url, json={"fields": fields}, headers=await _headers())
+        data = resp.json()
+        if data.get("code") in _TOKEN_EXPIRED_CODES and attempt == 0:
+            logger.warning("Feishu token expired on update, refreshing...")
+            await _force_refresh_token()
+            continue
+        break
 
     if data.get("code") != 0:
         logger.error("Feishu update error in %s/%s: %s", table_id, record_id, data.get("msg"))

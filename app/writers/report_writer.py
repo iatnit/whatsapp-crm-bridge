@@ -117,11 +117,11 @@ async def write_report_to_feishu(report: str, summary: dict) -> str | None:
     """Write daily report to Feishu CEO日报 Base.
 
     Upserts by date: if today's record exists, update; otherwise create.
+    Uses shared feishu_writer helpers for auto token-retry.
     Returns record_id or None.
     """
-    from app.writers.feishu_writer import _get_tenant_token, _get_http
+    from app.writers.feishu_writer import _search_records, _create_record, _update_record
 
-    BASE_URL = "https://open.feishu.cn/open-apis"
     cst = timezone(timedelta(hours=8))
     today = datetime.now(cst)
     date_str = today.strftime("%Y-%m-%d")
@@ -129,10 +129,6 @@ async def write_report_to_feishu(report: str, summary: dict) -> str | None:
     # Date as millisecond timestamp (midnight CST)
     midnight = today.replace(hour=0, minute=0, second=0, microsecond=0)
     date_ms = int(midnight.timestamp() * 1000)
-
-    token = await _get_tenant_token()
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-    client = _get_http()
 
     # Extract sections from summary for structured fields
     results = summary.get("results", [])
@@ -148,13 +144,6 @@ async def write_report_to_feishu(report: str, summary: dict) -> str | None:
     errors = summary.get("errors", [])
     error_text = "\n".join(f"• {e}" for e in errors) if errors else ""
 
-    total = summary.get("total_conversations", 0)
-    analyzed = summary.get("analyzed", 0)
-    written = summary.get("written", 0)
-    overview = f"对话{total}个，分析{analyzed}个，写入{written}个"
-    if errors:
-        overview += f"，异常{len(errors)}个"
-
     fields = {
         "日期": date_ms,
         "今日日报全文": report,
@@ -163,45 +152,27 @@ async def write_report_to_feishu(report: str, summary: dict) -> str | None:
     if error_text:
         fields["今日日报全文"] = report + f"\n\n## 异常详情\n{error_text}"
 
-    # Search for existing record by date
-    search_url = f"{BASE_URL}/bitable/v1/apps/{_CEO_APP_TOKEN}/tables/{_CEO_TABLE_ID}/records/search"
-    search_payload = {
-        "filter": {
-            "conjunction": "and",
-            "conditions": [
-                {"field_name": "日期", "operator": "is", "value": [date_str]},
-            ],
-        },
-        "page_size": 1,
-    }
-
     try:
-        resp = await client.post(search_url, json=search_payload, headers=headers)
-        existing_id = None
-        if resp.status_code == 200:
-            items = resp.json().get("data", {}).get("items", [])
-            if items:
-                existing_id = items[0].get("record_id")
-
-        if existing_id:
-            # Update existing record
-            update_url = f"{BASE_URL}/bitable/v1/apps/{_CEO_APP_TOKEN}/tables/{_CEO_TABLE_ID}/records/{existing_id}"
-            resp = await client.put(update_url, json={"fields": fields}, headers=headers)
-            if resp.status_code == 200:
+        # Search for existing record by date
+        items = await _search_records(
+            _CEO_TABLE_ID, "日期", date_str, app_token=_CEO_APP_TOKEN,
+        )
+        if items:
+            existing_id = items[0].get("record_id")
+            result = await _update_record(
+                _CEO_TABLE_ID, existing_id, fields, app_token=_CEO_APP_TOKEN,
+            )
+            if result:
                 logger.info("CEO日报 updated for %s (record %s)", date_str, existing_id)
                 return existing_id
-            else:
-                logger.error("CEO日报 update failed [%d]: %s", resp.status_code, resp.text[:200])
         else:
-            # Create new record
-            create_url = f"{BASE_URL}/bitable/v1/apps/{_CEO_APP_TOKEN}/tables/{_CEO_TABLE_ID}/records"
-            resp = await client.post(create_url, json={"fields": fields}, headers=headers)
-            if resp.status_code == 200:
-                record_id = resp.json().get("data", {}).get("record", {}).get("record_id")
+            record = await _create_record(
+                _CEO_TABLE_ID, fields, app_token=_CEO_APP_TOKEN,
+            )
+            if record:
+                record_id = record.get("record_id", "")
                 logger.info("CEO日报 created for %s (record %s)", date_str, record_id)
                 return record_id
-            else:
-                logger.error("CEO日报 create failed [%d]: %s", resp.status_code, resp.text[:200])
     except Exception as e:
         logger.error("CEO日报 write failed: %s", e)
 
