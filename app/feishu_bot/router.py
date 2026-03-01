@@ -92,10 +92,11 @@ async def feishu_event(request: Request):
     if "challenge" in body:
         return {"challenge": body["challenge"]}
 
-    # Verify token if configured
-    token = body.get("token", "")
+    # Verify token if configured (v1: top-level, v2: inside header)
+    header = body.get("header", {})
+    token = body.get("token") or header.get("token", "")
     if settings.feishu_bot_verification_token and token != settings.feishu_bot_verification_token:
-        logger.warning("Feishu event: invalid verification token")
+        logger.warning("Feishu event: invalid verification token (got %s)", token[:8] if token else "empty")
         return {"code": 0}
 
     # Check master switch
@@ -103,7 +104,6 @@ async def feishu_event(request: Request):
         return {"code": 0}
 
     # 2) Event dedup
-    header = body.get("header", {})
     event_id = header.get("event_id", "")
     if event_id and _is_duplicate(event_id):
         logger.debug("Feishu event dedup: %s", event_id)
