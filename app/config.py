@@ -58,7 +58,7 @@ class Settings(BaseSettings):
     obsidian_sync_enabled: bool = False
 
     # --- Notifications ---
-    notify_phone: str = ""             # Lucky's WhatsApp number for daily reminders
+    feishu_webhook_url: str = ""       # Feishu group bot webhook for daily reminders
     reminder_hour: int = 9             # daily reminder time (CST hour, 0-23)
     reminder_minute: int = 0
 

@@ -115,7 +115,7 @@ async def lifespan(app: FastAPI):
     )
 
     # Morning follow-up reminder (CST timezone)
-    if settings.notify_phone:
+    if settings.feishu_webhook_url:
         from app.notifier.daily_reminder import send_daily_reminder
         scheduler.add_job(
             send_daily_reminder,
@@ -126,8 +126,8 @@ async def lifespan(app: FastAPI):
             id="daily_reminder",
         )
         logger.info(
-            "Daily reminder enabled: %02d:%02d CST → %s",
-            settings.reminder_hour, settings.reminder_minute, settings.notify_phone,
+            "Daily reminder enabled: %02d:%02d CST → Feishu webhook",
+            settings.reminder_hour, settings.reminder_minute,
         )
 
     scheduler.start()
