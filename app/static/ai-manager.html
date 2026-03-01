@@ -66,6 +66,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .toggle input:checked + .slider { background: #25d366; }
 .toggle input:checked + .slider::before { transform: translateX(20px); }
 .toggle input:disabled + .slider { opacity: .5; cursor: wait; }
+/* Big customer inline toggle */
+.big-toggle { display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; flex-shrink: 0; }
+.big-toggle label { position: relative; width: 32px; height: 18px; cursor: pointer; display: inline-block; }
+.big-toggle input { opacity: 0; width: 0; height: 0; }
+.big-toggle .sl { position: absolute; inset: 0; background: #ccc; border-radius: 18px; transition: .2s; }
+.big-toggle .sl::before { content: ''; position: absolute; width: 14px; height: 14px; left: 2px; bottom: 2px; background: #fff; border-radius: 50%; transition: .2s; }
+.big-toggle input:checked + .sl { background: #f59e0b; }
+.big-toggle input:checked + .sl::before { transform: translateX(14px); }
+.big-toggle span.bl { font-size: 10px; color: #92400e; font-weight: 600; }
 .empty { text-align: center; padding: 60px 20px; color: #667781; }
 .loading { text-align: center; padding: 60px 20px; color: #667781; }
 .pagination { display: flex; justify-content: center; align-items: center; gap: 12px; padding: 14px 20px; max-width: 900px; margin: 0 auto; }
@@ -97,6 +106,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
   <div class="stat active" data-filter="all" onclick="setStatFilter(this)">Total: <b id="s-total">-</b></div>
   <div class="stat" data-filter="ai-on" onclick="setStatFilter(this)">AI On: <b id="s-on">-</b></div>
   <div class="stat" data-filter="ai-off" onclick="setStatFilter(this)">AI Off: <b id="s-off">-</b></div>
+  <div class="stat" data-filter="big" onclick="setStatFilter(this)">Big: <b id="s-big">-</b></div>
   <div class="stat" data-filter="both" onclick="setStatFilter(this)">Both: <b id="s-both">-</b></div>
   <div class="stat" data-filter="hubspot-only" onclick="setStatFilter(this)">HubSpot: <b id="s-hs">-</b></div>
   <div class="stat" data-filter="local-only" onclick="setStatFilter(this)">Local: <b id="s-local">-</b></div>
@@ -180,12 +190,14 @@ async function refreshData() {
 
 function updateStats() {
   const off = customers.filter(c => c.ai_disabled).length;
+  const big = customers.filter(c => c.is_big_customer).length;
   const both = customers.filter(c => c.source === 'both').length;
   const hs = customers.filter(c => c.source === 'hubspot').length;
   const local = customers.filter(c => c.source === 'local').length;
   document.getElementById('s-total').textContent = customers.length;
   document.getElementById('s-on').textContent = customers.length - off;
   document.getElementById('s-off').textContent = off;
+  document.getElementById('s-big').textContent = big;
   document.getElementById('s-both').textContent = both;
   document.getElementById('s-hs').textContent = hs;
   document.getElementById('s-local').textContent = local;
@@ -200,9 +212,10 @@ function getFiltered() {
       const hay = (c.display_name + ' ' + c.customer_name + ' ' + c.phone + ' ' + (c.customer_tags || '')).toLowerCase();
       if (!hay.includes(q)) return false;
     }
-    // Stat filter (handles "both" which dropdown doesn't have)
+    // Stat filter (handles "both" and "big" which dropdown doesn't have)
     if (sf === 'ai-on' && c.ai_disabled) return false;
     if (sf === 'ai-off' && !c.ai_disabled) return false;
+    if (sf === 'big' && !c.is_big_customer) return false;
     if (sf === 'both' && c.source !== 'both') return false;
     if (sf === 'hubspot-only' && c.source !== 'hubspot') return false;
     if (sf === 'local-only' && c.source !== 'local') return false;
@@ -280,7 +293,20 @@ function render() {
   el.innerHTML = items.map(c => {
     const name = c.customer_name || c.display_name || c.phone;
     const aiOn = !c.ai_disabled;
+    const isBig = c.is_big_customer;
     const isHsOnly = c.source === 'hubspot';
+
+    // Big customer toggle (inline, next to name)
+    let bigHtml = '';
+    if (!isHsOnly) {
+      bigHtml = '<div class="big-toggle">' +
+        '<label><input type="checkbox"' + (isBig ? ' checked' : '') +
+        ' onchange="toggleBig(\'' + c.phone + '\', this)">' +
+        '<span class="sl"></span></label>' +
+        (isBig ? '<span class="bl">Big</span>' : '') +
+      '</div>';
+    }
+
     const matchTag = c.match_status === 'matched'
       ? '<span class="tag">Matched</span>'
       : c.match_status === 'hubspot_only'
@@ -306,6 +332,7 @@ function render() {
       '<div class="info">' +
         '<div class="name-row">' +
           '<div class="name">' + esc(name) + '</div>' +
+          bigHtml +
           sourceBadge(c.source) +
         '</div>' +
         '<div class="phone">+' + esc(c.phone) + '</div>' +
@@ -410,6 +437,25 @@ async function toggleAI(phone, el) {
     if (!res.ok) throw new Error(res.statusText);
     const c = customers.find(x => x.phone === phone);
     if (c) c.ai_disabled = enable ? 0 : 1;
+    updateStats();
+    render();
+  } catch (e) {
+    el.checked = !el.checked;
+    alert('Toggle failed: ' + e.message);
+  }
+}
+
+async function toggleBig(phone, el) {
+  const isBig = el.checked;
+  try {
+    const res = await fetch('/api/v1/ai/big-customer/' + encodeURIComponent(phone), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_big: isBig }),
+    });
+    if (!res.ok) throw new Error(res.statusText);
+    const c = customers.find(x => x.phone === phone);
+    if (c) c.is_big_customer = isBig ? 1 : 0;
     updateStats();
     render();
   } catch (e) {

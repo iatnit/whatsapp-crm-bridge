@@ -63,6 +63,10 @@ MIGRATIONS = [
     """
     ALTER TABLE conversations ADD COLUMN ai_disabled INTEGER DEFAULT 0;
     """,
+    # Flag big/key customers for priority handling
+    """
+    ALTER TABLE conversations ADD COLUMN is_big_customer INTEGER DEFAULT 0;
+    """,
 ]
 
 

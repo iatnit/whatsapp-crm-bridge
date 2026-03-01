@@ -296,6 +296,7 @@ async def list_ai_customers():
             "match_status": c.get("match_status", "unmatched"),
             "total_messages": c.get("total_messages", 0),
             "ai_disabled": c.get("ai_disabled", 0),
+            "is_big_customer": c.get("is_big_customer", 0),
             "relationship_stage": rel_stage,
             "source": "both" if hs else "local",
             "hubspot_id": hs["id"] if hs else None,
@@ -323,6 +324,7 @@ async def list_ai_customers():
             "match_status": "hubspot_only",
             "total_messages": 0,
             "ai_disabled": 0,
+            "is_big_customer": 0,
             "relationship_stage": "",
             "source": "hubspot",
             "hubspot_id": h["id"],
@@ -363,6 +365,20 @@ async def list_ai_disabled():
     from app.store.conversations import get_ai_disabled_list
     customers = await get_ai_disabled_list()
     return {"count": len(customers), "customers": customers}
+
+
+@app.post("/api/v1/ai/big-customer/{phone}")
+async def toggle_big_customer(phone: str, payload: dict):
+    """Mark or unmark a customer as big/key customer.
+
+    Body: {"is_big": true}
+    """
+    from app.store.conversations import set_big_customer
+    is_big = bool(payload.get("is_big", False))
+    found = await set_big_customer(phone, is_big)
+    if not found:
+        return JSONResponse({"error": f"Phone {phone} not found"}, status_code=404)
+    return {"status": "ok", "phone": phone, "is_big_customer": is_big}
 
 
 @app.post("/api/v1/ai/tags/{phone}")
