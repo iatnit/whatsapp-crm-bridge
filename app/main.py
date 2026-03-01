@@ -78,6 +78,11 @@ async def lifespan(app: FastAPI):
     yield
     # Shutdown
     scheduler.shutdown(wait=False)
+    # Close shared httpx clients
+    from app.writers.hubspot_writer import close_http_client as close_hubspot_http
+    from app.writers.feishu_writer import close_http_client as close_feishu_http
+    await close_hubspot_http()
+    await close_feishu_http()
     logger.info("App stopped")
 
 

@@ -246,9 +246,17 @@ async def _call_gemini(system_prompt: str, user_prompt: str) -> str | None:
         return None
 
 
+_MAX_PHONE_LOCKS = 5000
+
+
 def _get_phone_lock(phone: str) -> asyncio.Lock:
     """Get or create a per-phone lock to prevent concurrent replies."""
     if phone not in _phone_locks:
+        # Evict stale unlocked entries if at capacity
+        if len(_phone_locks) >= _MAX_PHONE_LOCKS:
+            stale = [k for k, v in _phone_locks.items() if not v.locked()]
+            for k in stale[:1000]:
+                del _phone_locks[k]
         _phone_locks[phone] = asyncio.Lock()
     return _phone_locks[phone]
 

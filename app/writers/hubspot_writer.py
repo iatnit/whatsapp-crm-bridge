@@ -30,6 +30,14 @@ def _get_http() -> httpx.AsyncClient:
     return _http
 
 
+async def close_http_client():
+    """Close the shared httpx client on shutdown."""
+    global _http
+    if _http and not _http.is_closed:
+        await _http.aclose()
+        _http = None
+
+
 # ── Auth ─────────────────────────────────────────────────────────────
 
 def _headers() -> dict:

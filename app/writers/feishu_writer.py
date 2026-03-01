@@ -30,6 +30,14 @@ def _get_http() -> httpx.AsyncClient:
     return _http
 
 
+async def close_http_client():
+    """Close the shared httpx client on shutdown."""
+    global _http
+    if _http and not _http.is_closed:
+        await _http.aclose()
+        _http = None
+
+
 # Token cache
 _token: str = ""
 _token_expires_at: float = 0
@@ -228,7 +236,9 @@ async def create_customer(
     """
     fields: dict = {"客户": name}
     if contact:
-        fields["联系电话"] = normalize_phone(contact)
+        normalized_contact = normalize_phone(contact)
+        if normalized_contact:
+            fields["联系电话"] = normalized_contact
     if contact_person:
         fields["联系人"] = contact_person
     if location:
