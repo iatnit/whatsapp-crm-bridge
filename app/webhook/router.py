@@ -40,6 +40,47 @@ async def _hubspot_upsert_contact(phone: str, display_name: str) -> None:
         logger.error("HubSpot upsert failed: %s", e)
 
 
+async def _forward_obsidian(
+    wa_message_id: str,
+    phone: str,
+    display_name: str,
+    direction: str,
+    msg_type: str,
+    content: str,
+    timestamp: int,
+) -> None:
+    """Look up customer_name from conversations table, then forward to Obsidian."""
+    from app.config import settings
+    if not settings.obsidian_sync_enabled:
+        return
+    try:
+        from app.store.database import get_db
+
+        customer_name = ""
+        async with get_db() as db:
+            cursor = await db.execute(
+                "SELECT customer_name FROM conversations WHERE phone = ?",
+                (phone,),
+            )
+            row = await cursor.fetchone()
+            if row:
+                customer_name = row["customer_name"] or ""
+
+        from app.writers.obsidian_forwarder import forward_to_obsidian
+        await forward_to_obsidian(
+            wa_message_id=wa_message_id,
+            phone=phone,
+            display_name=display_name,
+            customer_name=customer_name,
+            direction=direction,
+            msg_type=msg_type,
+            content=content,
+            timestamp=timestamp,
+        )
+    except Exception as e:
+        logger.warning("Obsidian forward failed: %s", e)
+
+
 async def _feishu_ensure_customer(phone: str, display_name: str) -> None:
     """Fire-and-forget Feishu customer creation on first inbound message.
 
@@ -164,6 +205,14 @@ async def receive_webhook(request: Request):
             display_name or phone,
             msg_type,
             content[:80],
+        )
+
+        # Forward to Obsidian local receiver (fire-and-forget, all messages)
+        asyncio.create_task(
+            _forward_obsidian(
+                wa_message_id, phone, display_name,
+                direction, msg_type, content, timestamp,
+            )
         )
 
         # Track human outbound → pause AI auto-reply

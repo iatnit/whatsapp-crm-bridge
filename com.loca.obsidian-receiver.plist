@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.loca.obsidian-receiver</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/zhangyun/Nutstore Files/我的坚果云/LuckyOS/LOCA-Factory-Brain/whatsapp-crm-bridge/local-receiver/venv/bin/python</string>
+        <string>/Users/zhangyun/Nutstore Files/我的坚果云/LuckyOS/LOCA-Factory-Brain/whatsapp-crm-bridge/local-receiver/receiver.py</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/zhangyun/Nutstore Files/我的坚果云/LuckyOS/LOCA-Factory-Brain/whatsapp-crm-bridge/local-receiver</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/zhangyun/Library/Logs/obsidian-receiver.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/zhangyun/Library/Logs/obsidian-receiver.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+</dict>
+</plist>

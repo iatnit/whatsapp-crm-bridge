@@ -96,8 +96,10 @@ async def lifespan(app: FastAPI):
     # Close shared httpx clients
     from app.writers.hubspot_writer import close_http_client as close_hubspot_http
     from app.writers.feishu_writer import close_http_client as close_feishu_http
+    from app.writers.obsidian_forwarder import close_http_client as close_obsidian_http
     await close_hubspot_http()
     await close_feishu_http()
+    await close_obsidian_http()
     logger.info("App stopped")
 
 

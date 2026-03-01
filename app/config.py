@@ -51,6 +51,11 @@ class Settings(BaseSettings):
     auto_reply_human_pause: int = 1800     # seconds to pause AI after human replies (default 30min)
     knowledge_base_path: str = "data/knowledge_base.md"
 
+    # --- Obsidian Sync ---
+    obsidian_sync_url: str = ""          # e.g. https://obsidian-sync.zhangyun.xyz
+    obsidian_sync_secret: str = ""       # shared HMAC-SHA256 secret
+    obsidian_sync_enabled: bool = False
+
     # --- App ---
     log_level: str = "INFO"
     daily_analysis_hour: int = 23
