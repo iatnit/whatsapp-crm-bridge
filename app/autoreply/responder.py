@@ -23,6 +23,7 @@ _ai_sent_ts: dict[str, float] = {}  # phone → timestamp when AI last sent (to 
 _human_takeover: dict[str, float] = {}  # phone → timestamp when human took over
 _phone_locks: dict[str, asyncio.Lock] = {}  # phone → lock (prevent concurrent replies)
 _last_reply_text: dict[str, str] = {}  # phone → last reply text (prevent duplicate content)
+_human_active_history: dict[str, float] = {}  # phone → last time human outbound was detected
 _last_cleanup: float = 0  # timestamp of last memory cleanup
 
 
@@ -41,7 +42,7 @@ def _cleanup_stale_entries() -> None:
     cutoff = now - 86400  # 24 hours ago
     stale_count = 0
 
-    for cache in (_last_reply_ts, _ai_sent_ts, _human_takeover):
+    for cache in (_last_reply_ts, _ai_sent_ts, _human_takeover, _human_active_history):
         stale = [k for k, v in cache.items() if v < cutoff]
         for k in stale:
             del cache[k]
@@ -108,12 +109,14 @@ def notify_outbound(phone: str) -> None:
     """
     now = time.time()
     ai_sent = _ai_sent_ts.get(phone, 0)
-    # If AI sent to this phone within the last 15 seconds, this outbound
+    # If AI sent to this phone within the last 30 seconds, this outbound
     # is likely the echo of our own AI message → ignore
-    if (now - ai_sent) < 15:
+    # (widened from 15s to account for WATI webhook delivery delay)
+    if (now - ai_sent) < 30:
         return
     # Otherwise, a human or external system sent this → pause AI
     _human_takeover[phone] = now
+    _human_active_history[phone] = now
     logger.info("Human takeover detected for %s, AI paused for %ds", phone, settings.auto_reply_human_pause)
 
 
@@ -139,15 +142,19 @@ def _format_conversation(messages: list[dict]) -> str:
 
 
 async def _has_recent_outbound(phone: str, window: int = 10) -> bool:
-    """Check if there's a recent outbound message within `window` seconds."""
-    messages = await get_messages_by_phone(phone, limit=3)
+    """Check if there's ANY outbound message within `window` seconds.
+
+    Scans the last 30 messages (not just the latest) so we don't miss
+    an outbound reply buried under newer inbound messages.
+    """
+    messages = await get_messages_by_phone(phone, limit=30)
     if not messages:
         return False
-    # messages are DESC by timestamp; check the most recent
-    latest = messages[0]
-    if latest["direction"] == "outbound":
-        age = time.time() - latest["timestamp"]
-        if age < window:
+    now = time.time()
+    for msg in messages:
+        if (now - msg["timestamp"]) > window:
+            break  # messages are DESC by timestamp, older ones won't match
+        if msg["direction"] == "outbound":
             return True
     return False
 
@@ -281,8 +288,15 @@ async def handle_auto_reply(
             logger.debug("Auto-reply hourly limit reached for %s, skipping", phone)
             return
 
+        # Dynamic delay: extend if Lucky was recently active on this phone
+        delay = settings.auto_reply_delay
+        human_last = _human_active_history.get(phone, 0)
+        if (time.time() - human_last) < 14400:  # 4 hours
+            delay = max(delay, 300)  # at least 5 minutes when human is active
+            logger.info("Human recently active for %s, extended delay to %ds", phone, delay)
+
         # Delay to let Lucky or KnowBot respond first
-        await asyncio.sleep(settings.auto_reply_delay)
+        await asyncio.sleep(delay)
 
         # Re-check ALL conditions after delay
         if _check_human_takeover(phone):
@@ -294,7 +308,7 @@ async def handle_auto_reply(
             return
 
         # Check if anyone already replied during our delay (wider window)
-        if await _has_recent_outbound(phone, window=settings.auto_reply_delay + 10):
+        if await _has_recent_outbound(phone, window=delay + 30):
             logger.info("Outbound detected during delay for %s, skipping auto-reply", phone)
             return
 
