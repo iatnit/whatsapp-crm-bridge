@@ -191,7 +191,8 @@ async def run_daily_pipeline() -> dict:
         hubspot_written = False
         if settings.hubspot_enabled:
             try:
-                hs_extra = build_hubspot_properties(analysis, phone)
+                total_msgs = conv.get("total_messages", 0) or len(msgs)
+                hs_extra = build_hubspot_properties(analysis, phone, total_messages=total_msgs)
                 hs_contact_id = await hubspot_ensure_contact(
                     phone, name=feishu_name, country=location, extra=hs_extra)
                 if hs_contact_id:

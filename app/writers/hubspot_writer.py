@@ -40,8 +40,21 @@ def _normalize_phone(phone: str) -> str:
 
 # ── Contact cache & lock ─────────────────────────────────────────────
 
+# Stage ordering for regression prevention (higher = more advanced)
+_STAGE_ORDER = {
+    "new_lead": 1,
+    "contacted": 2,
+    "qualified": 3,
+    "negotiating": 4,
+    "ordered": 5,
+    "repeat_buyer": 6,
+    "dormant": 0,   # can be overridden by any active stage
+    "lost": 0,      # can be overridden by any active stage
+}
+
 _contact_lock = asyncio.Lock()
-_contact_cache: dict[str, str] = {}  # normalized phone → contact_id
+_contact_cache: dict[str, str] = {}        # normalized phone → contact_id
+_stage_cache: dict[str, str] = {}          # contact_id → current customer_stage
 
 # Note dedup cache: "phone|YYYY-MM-DD" → note_id
 _note_cache: dict[str, str] = {}
@@ -50,6 +63,7 @@ _note_cache: dict[str, str] = {}
 def clear_contact_cache():
     """Clear in-memory caches. Call at pipeline start."""
     _contact_cache.clear()
+    _stage_cache.clear()
     _note_cache.clear()
 
 
@@ -74,7 +88,7 @@ async def search_contact_by_phone(phone: str) -> str | None:
                 ]
             }
         ],
-        "properties": ["phone", "firstname", "lastname", "country"],
+        "properties": ["phone", "firstname", "lastname", "country", "customer_stage"],
         "limit": 1,
     }
 
@@ -89,7 +103,12 @@ async def search_contact_by_phone(phone: str) -> str | None:
     results = data.get("results", [])
     if results:
         contact_id = results[0].get("id")
-        logger.debug("HubSpot found contact %s for phone %s", contact_id, normalized)
+        # Cache current stage for regression prevention
+        props = results[0].get("properties", {})
+        current_stage = props.get("customer_stage", "")
+        if contact_id and current_stage:
+            _stage_cache[contact_id] = current_stage
+        logger.debug("HubSpot found contact %s for phone %s (stage=%s)", contact_id, normalized, current_stage)
         return contact_id
     return None
 
@@ -213,6 +232,15 @@ async def ensure_contact(
             # Remove first_contact_date from updates to preserve original value
             update_extra = dict(extra) if extra else {}
             update_extra.pop("first_contact_date", None)
+
+            # Prevent customer_stage regression
+            new_stage = update_extra.get("customer_stage", "")
+            if new_stage and contact_id in _stage_cache:
+                current_stage = _stage_cache[contact_id]
+                if _STAGE_ORDER.get(new_stage, 0) <= _STAGE_ORDER.get(current_stage, 0):
+                    update_extra.pop("customer_stage", None)
+                    logger.debug("Stage regression prevented: %s → %s for %s", current_stage, new_stage, contact_id)
+
             if name or country or update_extra:
                 await update_contact(contact_id, name=name, country=country, extra=update_extra or None)
             _contact_cache[normalized] = contact_id
@@ -262,8 +290,13 @@ _LANG_MAP = {
 }
 
 
-def build_hubspot_properties(analysis: dict, phone: str) -> dict:
+def build_hubspot_properties(
+    analysis: dict, phone: str, total_messages: int = 0,
+) -> dict:
     """Extract HubSpot custom properties from the LLM analysis result.
+
+    Args:
+        total_messages: Total message count for this conversation (for stage calc).
 
     Returns a dict of HubSpot property name → value ready for API write.
     Only includes properties that have meaningful values.
@@ -302,14 +335,25 @@ def build_hubspot_properties(analysis: dict, phone: str) -> dict:
                 props["comm_language"] = value
                 break
 
-    # ── Customer stage (from tags + is_new_customer) ──
-    if analysis.get("is_new_customer"):
-        props["customer_stage"] = "new_lead"
-    else:
-        for tag in tags:
-            if "active" in tag:
-                props["customer_stage"] = "contacted"
-                break
+    # ── Customer stage (smart auto-progression) ──
+    # Determine stage from multiple signals (highest applicable wins)
+    stage = "new_lead"
+
+    # Has back-and-forth conversation → contacted
+    if total_messages > 3 or not analysis.get("is_new_customer"):
+        stage = "contacted"
+
+    # Has product interest or recommended codes → qualified
+    if codes or crm_fields.get("industry"):
+        stage = "qualified"
+
+    # Discussing MOQ/price → negotiating
+    moq = crm_fields.get("moq_qualified")
+    ps = crm_fields.get("price_sensitivity", "unknown")
+    if moq is not None or (ps and ps != "unknown"):
+        stage = "negotiating"
+
+    props["customer_stage"] = stage
 
     # ── Customer tags (from priority tags) ──
     tag_values = []

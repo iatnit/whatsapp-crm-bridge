@@ -166,6 +166,28 @@ async def search_customer(customer_name: str) -> str | None:
     return None
 
 
+async def search_customer_by_phone(phone: str) -> str | None:
+    """Search 客户管理CRM for a customer by phone number.
+
+    Returns the record_id if found, None otherwise.
+    More reliable than name-based search for dedup.
+    """
+    normalized = phone.strip().replace(" ", "").replace("-", "")
+    if not normalized.startswith("+"):
+        normalized = f"+{normalized}"
+
+    items = await _search_records(
+        table_id=settings.feishu_table_customers,
+        field_name="联系电话",
+        value=normalized,
+    )
+    if items:
+        record_id = items[0].get("record_id", "")
+        logger.info("Found customer by phone '%s' → %s", normalized, record_id)
+        return record_id
+    return None
+
+
 async def create_customer(
     name: str,
     contact: str = "",
@@ -196,6 +218,7 @@ async def create_customer(
 # Dedup lock and cache for ensure_customer
 _customer_lock = asyncio.Lock()
 _customer_cache: dict[str, str] = {}  # lowercase name → record_id
+_phone_cache: dict[str, str] = {}     # phone → record_id
 
 # Dedup cache for ensure_followup (key: "name|YYYY-MM-DD" → record_id)
 _followup_cache: dict[str, str] = {}
@@ -207,6 +230,7 @@ _attachment_cache: dict[str, list[dict]] = {}
 def clear_customer_cache():
     """Clear the in-memory customer and followup caches. Call at pipeline start."""
     _customer_cache.clear()
+    _phone_cache.clear()
     _followup_cache.clear()
     _attachment_cache.clear()
 
@@ -217,31 +241,50 @@ async def ensure_customer(
 ) -> str | None:
     """Search for a customer; create if not found. Returns record_id.
 
+    Dedup priority: phone number first (reliable), then name (fallback).
     Uses a lock + in-memory cache to prevent concurrent duplicate creation.
     """
     cache_key = name.strip().lower()
+    phone_key = phone.strip().lower() if phone else ""
 
-    # Fast path: check cache without lock
+    # Fast path: check caches without lock
+    if phone_key and phone_key in _phone_cache:
+        return _phone_cache[phone_key]
     if cache_key in _customer_cache:
         return _customer_cache[cache_key]
 
     async with _customer_lock:
         # Double-check after acquiring lock
+        if phone_key and phone_key in _phone_cache:
+            return _phone_cache[phone_key]
         if cache_key in _customer_cache:
             return _customer_cache[cache_key]
 
-        record_id = await search_customer(name)
+        # 1. Search by phone first (most reliable dedup)
+        record_id = None
+        if phone:
+            record_id = await search_customer_by_phone(phone)
+
+        # 2. Fall back to name search
+        if not record_id:
+            record_id = await search_customer(name)
+
         if record_id:
             _customer_cache[cache_key] = record_id
+            if phone_key:
+                _phone_cache[phone_key] = record_id
             return record_id
 
-        logger.info("Customer '%s' not found, creating new record", name)
+        # 3. Create new customer
+        logger.info("Customer '%s' (%s) not found, creating new record", name, phone)
         record_id = await create_customer(
             name, contact=phone, location=location,
             contact_person=contact_person,
         )
         if record_id:
             _customer_cache[cache_key] = record_id
+            if phone_key:
+                _phone_cache[phone_key] = record_id
         return record_id
 
 
