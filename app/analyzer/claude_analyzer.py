@@ -74,30 +74,48 @@ def _parse_llm_text(text: str) -> dict | None:
 
 
 async def _call_gemini(user_prompt: str) -> dict | None:
-    """Call Gemini with JSON mode for structured analysis."""
-    text = await call_gemini(
-        system_prompt=SYSTEM_PROMPT,
-        user_prompt=user_prompt,
-        json_mode=True,
-        max_tokens=2048,
-        timeout=60,
-    )
-    if not text:
-        return None
-    logger.info("Gemini analysis complete (%d chars)", len(text))
-    return _parse_llm_text(text)
+    """Call Gemini with JSON mode for structured analysis.
+
+    If JSON is truncated (parse fails), retries once with higher max_tokens.
+    """
+    for max_tokens in (4096, 8192):
+        text = await call_gemini(
+            system_prompt=SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+            json_mode=True,
+            max_tokens=max_tokens,
+            timeout=90,
+        )
+        if not text:
+            return None
+        logger.info("Gemini analysis complete (%d chars, max_tokens=%d)", len(text), max_tokens)
+        result = _parse_llm_text(text)
+        if result is not None:
+            return result
+        # JSON parse failed — likely truncated, retry with more tokens
+        if max_tokens < 8192:
+            logger.warning("Gemini JSON truncated (%d chars), retrying with max_tokens=8192", len(text))
+    return None
 
 
 async def _call_anthropic(user_prompt: str) -> dict | None:
-    """Call Anthropic Claude API (async)."""
+    """Call Anthropic Claude API (async).
+
+    Validates API key format before attempting the call.
+    """
+    key = settings.anthropic_api_key
+    if not key or not key.startswith("sk-ant-"):
+        logger.warning("Anthropic API key missing or invalid format, skipping fallback")
+        return None
+
     import anthropic
 
-    client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key, timeout=60)
+    client = anthropic.AsyncAnthropic(api_key=key, timeout=60)
 
     try:
         response = await client.messages.create(
             model="claude-sonnet-4-20250514",
-            max_tokens=2048,
+            max_tokens=4096,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": user_prompt}],
         )
@@ -105,6 +123,10 @@ async def _call_anthropic(user_prompt: str) -> dict | None:
         logger.info("Claude analysis complete (%d chars)", len(text))
         return _parse_llm_text(text)
 
+    except anthropic.AuthenticationError:
+        logger.error("Anthropic API key invalid (401), disabling fallback for this session")
+        settings.anthropic_api_key = ""  # prevent repeated 401s
+        return None
     except Exception as e:
         logger.error("Claude API error: %s", e)
         return None

@@ -383,6 +383,8 @@ async def list_ai_customers():
             "ai_disabled": c.get("ai_disabled", 0),
             "customer_size": c.get("customer_size") or "",
             "relationship_stage": rel_stage,
+            "intent_priority": c.get("intent_priority") or "",
+            "intent_tags": c.get("intent_tags") or "",
             "source": "both" if hs else "local",
             "hubspot_id": hs["id"] if hs else None,
             "customer_stage": (hs or {}).get("customer_stage") or "",

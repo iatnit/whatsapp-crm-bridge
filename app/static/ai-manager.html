@@ -38,7 +38,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .badge { font-size: 10px; padding: 2px 7px; border-radius: 4px; font-weight: 600; flex-shrink: 0; }
 .badge.ai-on { background: #dcfce7; color: #166534; }
 .badge.ai-off { background: #f3f4f6; color: #6b7280; }
+.badge.hot { background: #fee2e2; color: #dc2626; animation: pulse 2s infinite; }
+.badge.warm { background: #fef3c7; color: #d97706; }
 .badge.big { background: #fef3c7; color: #92400e; }
+@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.7; } }
 .badge.medium { background: #dbeafe; color: #1e40af; }
 .badge.small { background: #f3f4f6; color: #6b7280; }
 /* Size selector */
@@ -106,6 +109,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 
 <div class="stats" id="stats">
   <div class="stat active" onclick="statClick('all')" id="st-all">Total: <b id="s-total">-</b></div>
+  <div class="stat" onclick="statClick('hot')" id="st-hot">Hot: <b id="s-hot">-</b></div>
   <div class="stat" onclick="statClick('ai-on')" id="st-ai-on">AI On: <b id="s-on">-</b></div>
   <div class="stat" onclick="statClick('ai-off')" id="st-ai-off">AI Off: <b id="s-off">-</b></div>
   <div class="stat" onclick="statClick('big')" id="st-big">Big: <b id="s-big">-</b></div>
@@ -171,12 +175,14 @@ function _authUrl(url) {
 let customers = [];
 let openDropdown = null;
 let currentPage = 1;
+let customFilter = null;  // 'hot' or null
 const PAGE_SIZE = 50;
 const SOURCE_ORDER = { both: 0, hubspot: 1, local: 2 };
 
 // Stat button → dropdown mapping
 const STAT_MAP = {
   'all':     { source: 'all', ai: 'all', size: 'all' },
+  'hot':     { _custom: 'hot' },
   'ai-on':   { ai: 'on' },
   'ai-off':  { ai: 'off' },
   'big':     { size: 'big' },
@@ -193,8 +199,10 @@ function statClick(key) {
   document.getElementById('f-ai').value = 'all';
   document.getElementById('f-size').value = 'all';
   document.getElementById('f-type').value = 'all';
+  customFilter = null;
   // Apply mapped values
   const m = STAT_MAP[key] || {};
+  if (m._custom) { customFilter = m._custom; }
   if (m.source) document.getElementById('f-source').value = m.source;
   if (m.ai) document.getElementById('f-ai').value = m.ai;
   if (m.size) document.getElementById('f-size').value = m.size;
@@ -236,6 +244,7 @@ async function refreshData() {
 
 function updateStats() {
   const off = customers.filter(c => c.ai_disabled).length;
+  const hot = customers.filter(c => c.intent_priority === 'high').length;
   const big = customers.filter(c => c.customer_size === 'big').length;
   const med = customers.filter(c => c.customer_size === 'medium').length;
   const sml = customers.filter(c => c.customer_size === 'small').length;
@@ -243,6 +252,7 @@ function updateStats() {
   const hs = customers.filter(c => c.source === 'hubspot').length;
   const local = customers.filter(c => c.source === 'local').length;
   document.getElementById('s-total').textContent = customers.length;
+  document.getElementById('s-hot').textContent = hot;
   document.getElementById('s-on').textContent = customers.length - off;
   document.getElementById('s-off').textContent = off;
   document.getElementById('s-big').textContent = big;
@@ -276,6 +286,8 @@ function getFiltered() {
     if (fType === 'matched' && c.match_status !== 'matched') return false;
     if (fType === 'unmatched' && c.match_status !== 'unmatched') return false;
     if (fType === 'has-tags' && !c.customer_tags) return false;
+    // Custom filter
+    if (customFilter === 'hot' && c.intent_priority !== 'high') return false;
     return true;
   });
 }
@@ -348,6 +360,8 @@ function render() {
       : '<span class="badge ai-off">AI Off</span>';
     const SIZE_BADGE = { big: '<span class="badge big">Big</span>', medium: '<span class="badge medium">Med</span>', small: '<span class="badge small">Small</span>' };
     const sizeBadge = SIZE_BADGE[size] || '';
+    const PRIO_BADGE = { high: '<span class="badge hot">Hot</span>', medium: '<span class="badge warm">Warm</span>' };
+    const prioBadge = PRIO_BADGE[c.intent_priority] || '';
 
     const matchTag = c.match_status === 'matched'
       ? '<span class="tag">Matched</span>'
@@ -356,6 +370,9 @@ function render() {
         : '<span class="tag warn">Unmatched</span>';
     const stageTag = c.relationship_stage ? '<span class="tag muted">' + stageLabel(c.relationship_stage) + '</span>' : '';
     const msgTag = c.total_messages ? '<span class="tag muted">' + c.total_messages + ' msgs</span>' : '';
+    // Intent tags from LLM analysis (e.g. "intent/inquiry;product/DR-14")
+    const intentTags = (c.intent_tags || '').split(';').filter(t => t.trim() && !t.startsWith('priority/'))
+      .map(t => '<span class="tag muted">' + esc(t.replace(/^[^/]+\//, '')) + '</span>').join('');
 
     // Right-side controls (only for local/both contacts)
     let togglesHtml = '';
@@ -387,10 +404,10 @@ function render() {
       '<div class="info">' +
         '<div class="name-row">' +
           '<div class="name">' + esc(name) + '</div>' +
-          aiBadge + sizeBadge + sourceBadge(c.source) +
+          prioBadge + aiBadge + sizeBadge + sourceBadge(c.source) +
         '</div>' +
         '<div class="phone">+' + esc(c.phone) + '</div>' +
-        '<div class="tags">' + matchTag + stageTag + msgTag + '</div>' +
+        '<div class="tags">' + matchTag + stageTag + msgTag + intentTags + '</div>' +
         hsPropsHtml(c) +
         ctagsHtml(c) +
       '</div>' +
@@ -519,6 +536,7 @@ function nextPage() { currentPage++; render(); window.scrollTo(0, 0); }
 
 function onFilterChange() {
   document.querySelectorAll('.stat').forEach(s => s.classList.remove('active'));
+  customFilter = null;
   currentPage = 1;
   render();
 }

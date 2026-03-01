@@ -104,6 +104,26 @@ def _build_reminder_content(
     return lines
 
 
+def _build_sync_content(sync: dict) -> list[list[dict]]:
+    """Build Feishu content lines for data sync health report."""
+    total = sync.get("total_conversations", 0)
+    both = sync.get("both_linked", 0)
+    feishu_only = sync.get("feishu_only", 0)
+    hs_only = sync.get("hubspot_only", 0)
+    neither = sync.get("neither", 0)
+
+    if neither == 0 and feishu_only == 0 and hs_only == 0:
+        return []  # All healthy, skip section
+
+    lines: list[list[dict]] = []
+    lines.append([{"tag": "text", "text": ""}])
+    lines.append([{"tag": "text", "text": "🔍 数据巡检\n"}])
+    lines.append([{"tag": "text", "text": f"  总客户: {total} | 双系统: {both} | 飞书独有: {feishu_only} | HS独有: {hs_only}"}])
+    if neither:
+        lines.append([{"tag": "text", "text": f"  ⚠️ {neither} 个客户未关联任何CRM"}])
+    return lines
+
+
 async def send_daily_reminder() -> bool:
     """Build and send the morning follow-up reminder via Feishu webhook.
 
@@ -138,11 +158,21 @@ async def send_daily_reminder() -> bool:
             carry_phones.add(phone)
             carry_items.append(a)
 
+    # Fetch sync status (Feishu ↔ HubSpot data health)
+    from app.store.conversations import get_sync_status
+    sync = await get_sync_status()
+
     if not today_actions and not carry_items:
         logger.info("Daily reminder: no pending actions for %s", today_str)
+        # Still send sync report if there are gaps
+        if sync.get("neither", 0) > 0:
+            title = f"📋 数据巡检 — {today_str}"
+            content = _build_sync_content(sync)
+            return await _send_feishu_webhook(title, content)
         return False
 
     # Build and send
     title = f"📋 今日跟进提醒 — {today_str}"
     content = _build_reminder_content(today_actions, carry_items)
+    content.extend(_build_sync_content(sync))
     return await _send_feishu_webhook(title, content)
