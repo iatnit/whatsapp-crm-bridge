@@ -157,6 +157,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 const TAG_OPTIONS = ['hot_lead', 'vip', 'repeat_buyer', 'first_timer', 'price_shopper', 'risky', 'agent_potential'];
 const TAG_LABELS = { hot_lead: 'Hot Lead', vip: 'VIP', repeat_buyer: 'Repeat Buyer', first_timer: 'First Timer', price_shopper: 'Price Shopper', risky: 'Risky', agent_potential: 'Agent Potential' };
 
+// Admin token from URL: /ai-manager?admin_token=xxx
+const _adminToken = new URLSearchParams(location.search).get('admin_token') || '';
+function _authHeaders() {
+  const h = { 'Content-Type': 'application/json' };
+  if (_adminToken) h['Authorization'] = 'Bearer ' + _adminToken;
+  return h;
+}
+function _authUrl(url) {
+  return _adminToken ? url + (url.includes('?') ? '&' : '?') + 'admin_token=' + encodeURIComponent(_adminToken) : url;
+}
+
 let customers = [];
 let openDropdown = null;
 let currentPage = 1;
@@ -218,7 +229,7 @@ async function loadCustomers() {
 async function refreshData() {
   document.getElementById('list').innerHTML = '<div class="loading">Refreshing...</div>';
   try {
-    await fetch('/api/v1/ai/refresh', { method: 'POST' });
+    await fetch(_authUrl('/api/v1/ai/refresh'), { method: 'POST', headers: _authHeaders() });
   } catch (e) { /* ignore */ }
   await loadCustomers();
 }
@@ -431,9 +442,9 @@ document.addEventListener('click', closeTagDropdown);
 async function saveTags(phone, tagsArray) {
   const tagsStr = tagsArray.join(';');
   try {
-    const res = await fetch('/api/v1/ai/tags/' + encodeURIComponent(phone), {
+    const res = await fetch(_authUrl('/api/v1/ai/tags/' + encodeURIComponent(phone)), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: _authHeaders(),
       body: JSON.stringify({ tags: tagsStr }),
     });
     if (!res.ok) {
@@ -474,7 +485,7 @@ async function toggleAI(phone, el) {
     : '/api/v1/ai/disable/' + phone;
   el.disabled = true;
   try {
-    const res = await fetch(url, { method: 'POST' });
+    const res = await fetch(_authUrl(url), { method: 'POST', headers: _authHeaders() });
     if (!res.ok) throw new Error(res.statusText);
     const c = customers.find(x => x.phone === phone);
     if (c) c.ai_disabled = enable ? 0 : 1;
@@ -488,9 +499,9 @@ async function toggleAI(phone, el) {
 
 async function setSize(phone, size) {
   try {
-    const res = await fetch('/api/v1/ai/customer-size/' + encodeURIComponent(phone), {
+    const res = await fetch(_authUrl('/api/v1/ai/customer-size/' + encodeURIComponent(phone)), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: _authHeaders(),
       body: JSON.stringify({ size: size }),
     });
     if (!res.ok) throw new Error(res.statusText);

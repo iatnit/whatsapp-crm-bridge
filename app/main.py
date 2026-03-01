@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from app.config import settings
@@ -27,15 +27,22 @@ logger = logging.getLogger(__name__)
 
 # ── Admin auth dependency ─────────────────────────────────────────────
 
-async def verify_admin(authorization: str = Header(default="")) -> None:
+async def verify_admin(
+    authorization: str = Header(default=""),
+    token: str = Query(default="", alias="admin_token"),
+) -> None:
     """Verify admin token for management endpoints.
 
-    Accepts: Authorization: Bearer <token> or ?token= query param.
+    Accepts: Authorization: Bearer <token>, or ?admin_token= query param.
     Skipped if ADMIN_TOKEN is not configured.
     """
     if not settings.admin_token:
         return  # no token configured = skip auth
-    token = authorization.removeprefix("Bearer ").strip()
+    # Check Authorization header
+    header_token = authorization.removeprefix("Bearer ").strip()
+    if header_token == settings.admin_token:
+        return
+    # Check query param
     if token == settings.admin_token:
         return
     raise HTTPException(status_code=401, detail="unauthorized")
@@ -438,7 +445,7 @@ async def update_tags(phone: str, payload: dict):
     return {"status": "ok", "phone": phone, "tags": tags_str}
 
 
-@app.post("/api/v1/ai/refresh")
+@app.post("/api/v1/ai/refresh", dependencies=[Depends(verify_admin)])
 async def refresh_cache():
     """Pull fresh HubSpot contacts and update local cache."""
     t0 = time.time()
