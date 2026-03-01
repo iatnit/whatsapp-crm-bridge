@@ -235,10 +235,10 @@ async def run_daily_pipeline() -> dict:
                     customer_record_id=record_id,
                     customer_name=feishu_name,
                     title=analysis.get("followup_title", "WhatsApp沟通"),
-                    detail=analysis.get("followup_detail", ""),
+                    detail=analysis.get("summary", ""),
                     summary=analysis.get("summary", ""),
                     method="WhatsApp沟通",
-                    image_paths=image_paths,
+                    image_paths=None,
                 )
                 if followup_id:
                     written_count += 1
@@ -253,6 +253,32 @@ async def run_daily_pipeline() -> dict:
                 "name": feishu_name, "phone": phone,
                 "location": location, "contact_person": display_name,
             }, str(e))
+
+        # Obsidian 详细总结（fire-and-forget）
+        try:
+            from app.writers.obsidian_forwarder import forward_summary_to_obsidian
+            customer_info = analysis.get("customer_info", {})
+            feishu_number = ""
+            if record_id:
+                feishu_number = get_customer_number(record_id) or ""
+            await forward_summary_to_obsidian(
+                customer_name=feishu_name,
+                phone=phone,
+                display_name=display_name,
+                feishu_id=str(feishu_number),
+                location=location,
+                language=customer_info.get("language", ""),
+                summary=analysis.get("summary", ""),
+                demand_summary=analysis.get("demand_summary", ""),
+                followup_title=analysis.get("followup_title", ""),
+                followup_detail=analysis.get("followup_detail", ""),
+                recommended_codes=analysis.get("recommended_codes", []),
+                next_actions=analysis.get("next_actions", []),
+                tags=analysis.get("tags", []),
+                date=datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d"),
+            )
+        except Exception as e:
+            logger.warning("Obsidian summary forward failed for %s: %s", customer_name, e)
 
         # HubSpot 写入（独立于飞书，互不阻塞）
         hubspot_written = False

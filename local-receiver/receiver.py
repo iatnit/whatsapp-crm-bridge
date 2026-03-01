@@ -183,6 +183,92 @@ def _write_message(
     return True
 
 
+# ── CRM summary writing ───────────────────────────────────────────
+
+def _write_summary(
+    folder_name: str,
+    date: str,
+    customer_name: str,
+    phone: str,
+    location: str,
+    summary: str,
+    demand_summary: str,
+    followup_title: str,
+    followup_detail: str,
+    recommended_codes: list[str],
+    next_actions: list[str],
+    tags: list[str],
+) -> str:
+    """Write (overwrite) a CRM summary file into the customer's CRM folder.
+
+    Returns the file path relative to crm_base_path.
+    """
+    crm_base = Path(settings.crm_base_path)
+    folder_path = crm_base / folder_name
+    folder_path.mkdir(parents=True, exist_ok=True)
+
+    # Build slug from customer name: lowercase, spaces/special → hyphens
+    slug = re.sub(r"[^a-zA-Z0-9]+", "-", customer_name).strip("-").lower() or "unknown"
+    filename = f"crm-{slug}-{date}.md"
+    file_path = folder_path / filename
+
+    # Build recommended products section
+    products_lines = ""
+    if recommended_codes:
+        products_lines = "\n".join(f"- {code}" for code in recommended_codes)
+
+    # Build pending actions section
+    actions_lines = ""
+    if next_actions:
+        items = []
+        for action in next_actions:
+            if action.lower().startswith("(waiting)") or action.lower().startswith("waiting"):
+                items.append(f"- [ ] {action}")
+            else:
+                items.append(f"- [ ] {action}")
+        actions_lines = "\n".join(items)
+
+    # Build tags
+    tags_str = ", ".join(tags) if tags else ""
+
+    content = f"""---
+type: crm
+customer: {customer_name}
+created: {date}
+source: auto-pipeline
+tags: [{tags_str}]
+---
+
+# CRM - {customer_name}
+
+## Basic Info
+| Field | Value |
+|-------|-------|
+| **WhatsApp** | {phone} |
+| **Location** | {location or 'N/A'} |
+
+## Summary
+{summary or 'N/A'}
+
+## Demand
+{demand_summary or 'N/A'}
+
+## Recommended Products
+{products_lines or 'N/A'}
+
+## Communication Log
+### {date}
+**{followup_title or 'WhatsApp沟通'}**
+{followup_detail or summary or 'N/A'}
+
+## Pending Actions
+{actions_lines or '- [ ] No pending actions'}
+"""
+
+    file_path.write_text(content, encoding="utf-8")
+    return str(file_path.relative_to(crm_base))
+
+
 # ── Endpoints ──────────────────────────────────────────────────────
 
 @app.post("/api/v1/message")
@@ -232,6 +318,54 @@ async def receive_message(request: Request):
         "written": written,
         "folder": folder_name,
     }
+
+
+@app.post("/api/v1/summary")
+async def receive_summary(request: Request):
+    """Receive a CRM summary from daily pipeline and write to Obsidian."""
+    body = await request.body()
+
+    # Verify HMAC signature
+    signature = request.headers.get("X-Signature", "")
+    if not _verify_signature(body, signature):
+        return JSONResponse({"error": "invalid signature"}, status_code=401)
+
+    try:
+        data = json.loads(body)
+    except Exception:
+        return JSONResponse({"error": "invalid JSON"}, status_code=400)
+
+    customer_name = data.get("customer_name", "")
+    phone = data.get("phone", "")
+    display_name = data.get("display_name", "")
+
+    if not customer_name and not phone:
+        return JSONResponse({"error": "missing customer_name or phone"}, status_code=400)
+
+    # Use today's date in CST if not provided
+    date = data.get("date", "") or datetime.now(tz=CST).strftime("%Y-%m-%d")
+
+    # Resolve folder
+    folder_name = _resolve_folder(phone, customer_name, display_name)
+
+    # Write summary file (overwrite = idempotent)
+    rel_path = _write_summary(
+        folder_name=folder_name,
+        date=date,
+        customer_name=customer_name or display_name or folder_name,
+        phone=phone,
+        location=data.get("location", ""),
+        summary=data.get("summary", ""),
+        demand_summary=data.get("demand_summary", ""),
+        followup_title=data.get("followup_title", ""),
+        followup_detail=data.get("followup_detail", ""),
+        recommended_codes=data.get("recommended_codes", []),
+        next_actions=data.get("next_actions", []),
+        tags=data.get("tags", []),
+    )
+
+    logger.info("Summary written: %s/%s", folder_name, rel_path)
+    return {"status": "ok", "file": rel_path, "folder": folder_name}
 
 
 @app.get("/health")
