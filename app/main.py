@@ -168,7 +168,7 @@ _ai_manager_html: str | None = None
 # HubSpot contact cache (TTL 300s)
 _hubspot_cache: list[dict] | None = None
 _hubspot_cache_ts: float = 0
-_HUBSPOT_CACHE_TTL = 300
+_HUBSPOT_CACHE_TTL = 1800
 
 _VALID_TAGS = {"hot_lead", "vip", "repeat_buyer", "first_timer", "price_shopper", "risky", "agent_potential"}
 
@@ -203,7 +203,7 @@ async def ai_manager_page():
 @app.get("/api/v1/ai/customers")
 async def list_ai_customers():
     """Return merged local + HubSpot customers for the manager UI."""
-    from app.store.conversations import get_all_conversations, get_customer_context
+    from app.store.conversations import get_all_conversations
 
     # 1) Local conversations
     convs = await get_all_conversations()
@@ -224,7 +224,23 @@ async def list_ai_customers():
 
     # 3) Build merged list: local conversations enriched with HubSpot data
     for c in convs:
-        ctx = await get_customer_context(c["phone"])
+        # Inline relationship_stage calc (avoids N+1 DB queries)
+        total = c.get("total_messages") or 0
+        first_at = c.get("first_message_at")
+        if first_at and isinstance(first_at, (int, float)) and first_at > 0:
+            first_seen_days = max(0, int((time.time() - first_at) / 86400))
+        else:
+            first_seen_days = 0
+
+        if total <= 2:
+            rel_stage = "new"
+        elif total <= 10 or first_seen_days <= 3:
+            rel_stage = "early"
+        elif total <= 50 or first_seen_days <= 30:
+            rel_stage = "developing"
+        else:
+            rel_stage = "established"
+
         phone_key = _digits(c["phone"])
         hs = hs_by_phone.get(phone_key)
         if hs:
@@ -237,28 +253,28 @@ async def list_ai_customers():
             "match_status": c.get("match_status", "unmatched"),
             "total_messages": c.get("total_messages", 0),
             "ai_disabled": c.get("ai_disabled", 0),
-            "relationship_stage": ctx["relationship_stage"],
+            "relationship_stage": rel_stage,
             "source": "both" if hs else "local",
             "hubspot_id": hs["id"] if hs else None,
-            "customer_stage": (hs or {}).get("customer_stage", ""),
-            "product_interest": (hs or {}).get("product_interest", ""),
-            "customer_tags": (hs or {}).get("customer_tags", ""),
-            "customer_type": (hs or {}).get("customer_type", ""),
-            "industry": (hs or {}).get("industry", ""),
-            "customer_tier": (hs or {}).get("customer_tier", ""),
+            "customer_stage": (hs or {}).get("customer_stage") or "",
+            "product_interest": (hs or {}).get("product_interest") or "",
+            "customer_tags": (hs or {}).get("customer_tags") or "",
+            "customer_type": (hs or {}).get("customer_type") or "",
+            "industry": (hs or {}).get("industry") or "",
+            "customer_tier": (hs or {}).get("customer_tier") or "",
         }
         customers.append(entry)
 
     # 4) HubSpot-only contacts (not in local)
     for h in hs_contacts:
-        phone_key = _digits(h.get("phone", "") or h.get("whatsapp_number", ""))
+        phone_key = _digits(h.get("phone") or h.get("whatsapp_number") or "")
         if not phone_key or phone_key in seen_hs_keys:
             continue
         seen_hs_keys.add(phone_key)
-        name_parts = [h.get("firstname", ""), h.get("lastname", "")]
+        name_parts = [h.get("firstname") or "", h.get("lastname") or ""]
         display = " ".join(p for p in name_parts if p).strip()
         customers.append({
-            "phone": h.get("phone", "") or h.get("whatsapp_number", "") or "",
+            "phone": h.get("phone") or h.get("whatsapp_number") or "",
             "display_name": display,
             "customer_name": display,
             "match_status": "hubspot_only",
@@ -267,12 +283,12 @@ async def list_ai_customers():
             "relationship_stage": "",
             "source": "hubspot",
             "hubspot_id": h["id"],
-            "customer_stage": h.get("customer_stage", ""),
-            "product_interest": h.get("product_interest", ""),
-            "customer_tags": h.get("customer_tags", ""),
-            "customer_type": h.get("customer_type", ""),
-            "industry": h.get("industry", ""),
-            "customer_tier": h.get("customer_tier", ""),
+            "customer_stage": h.get("customer_stage") or "",
+            "product_interest": h.get("product_interest") or "",
+            "customer_tags": h.get("customer_tags") or "",
+            "customer_type": h.get("customer_type") or "",
+            "industry": h.get("industry") or "",
+            "customer_tier": h.get("customer_tier") or "",
         })
 
     return {"count": len(customers), "customers": customers}
