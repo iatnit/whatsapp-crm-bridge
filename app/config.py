@@ -57,6 +57,11 @@ class Settings(BaseSettings):
     obsidian_sync_secret: str = ""       # shared HMAC-SHA256 secret
     obsidian_sync_enabled: bool = False
 
+    # --- Notifications ---
+    notify_phone: str = ""             # Lucky's WhatsApp number for daily reminders
+    reminder_hour: int = 9             # daily reminder time (CST hour, 0-23)
+    reminder_minute: int = 0
+
     # --- App ---
     log_level: str = "INFO"
     daily_analysis_hour: int = 23

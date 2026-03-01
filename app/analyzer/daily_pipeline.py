@@ -13,6 +13,8 @@ from app.store.conversations import (
     get_unmatched_conversations,
     update_customer_match,
     update_hubspot_id,
+    update_intent,
+    upsert_customer_action,
 )
 from app.store.retry_queue import enqueue, get_pending, mark_success, mark_retried, cleanup_old
 from app.matcher.customer_matcher import match_all_unmatched, load_customers
@@ -220,7 +222,15 @@ async def run_daily_pipeline() -> dict:
             else:
                 analysis = await analyze_conversation(msgs, customer_name, phone)
             if not analysis:
-                errors.append(f"Analysis failed for {customer_name} ({phone})")
+                # Check if it was a skip (too few text messages) vs real error
+                text_msgs = [m for m in msgs if m.get("msg_type") == "text" and (m.get("content") or "").strip()]
+                if len(text_msgs) < 2:
+                    logger.info("Skipped %s (%s) — too few text messages (%d)", customer_name, phone, len(text_msgs))
+                    # Mark processed so we don't re-analyze empty conversations every hour
+                    msg_ids = [m["id"] for m in msgs]
+                    await mark_processed(msg_ids)
+                else:
+                    errors.append(f"Analysis failed for {customer_name} ({phone})")
                 return None
 
             # Determine customer name (shared by Feishu + HubSpot)
@@ -361,6 +371,29 @@ async def run_daily_pipeline() -> dict:
                 except Exception as e:
                     logger.error("HubSpot deal creation error for %s: %s", customer_name, e)
 
+            # P1b: Store intent tags in conversations table
+            tags = analysis.get("tags", [])
+            priority = "medium"
+            for t in tags:
+                if t.startswith("priority/"):
+                    priority = t.split("/", 1)[1]
+            await update_intent(phone, priority, ";".join(tags))
+
+            # P1a: Store next_actions for daily reminder
+            next_actions = analysis.get("next_actions", {})
+            if isinstance(next_actions, dict):
+                cst_date = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d")
+                await upsert_customer_action(
+                    phone=phone,
+                    action_date=cst_date,
+                    customer_name=feishu_name,
+                    today_action=next_actions.get("today", ""),
+                    tomorrow_action=next_actions.get("tomorrow", ""),
+                    pending_customer=next_actions.get("pending_customer", ""),
+                    priority=priority,
+                    summary=analysis.get("summary", ""),
+                )
+
             result = {
                 "phone": phone,
                 "customer_name": customer_name,
@@ -385,12 +418,14 @@ async def run_daily_pipeline() -> dict:
 
     analyzed_count = 0
     written_count = 0
+    skipped_count = 0
     for r in task_results:
         if isinstance(r, Exception):
             errors.append(f"Unexpected pipeline error: {r}")
             logger.error("Pipeline task exception: %s", r)
             continue
         if r is None:
+            skipped_count += 1
             continue
         results.append(r)
         analyzed_count += 1
@@ -409,6 +444,7 @@ async def run_daily_pipeline() -> dict:
         "total_messages": len(messages),
         "analyzed": analyzed_count,
         "written": written_count,
+        "skipped": skipped_count,
         "new_matches": len(match_results),
         "auto_created": auto_created,
         "retried": retry_count,

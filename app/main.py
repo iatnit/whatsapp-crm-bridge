@@ -113,6 +113,23 @@ async def lifespan(app: FastAPI):
         minute=settings.daily_analysis_minute,
         id="daily_analysis",
     )
+
+    # Morning follow-up reminder (CST timezone)
+    if settings.notify_phone:
+        from app.notifier.daily_reminder import send_daily_reminder
+        scheduler.add_job(
+            send_daily_reminder,
+            "cron",
+            hour=settings.reminder_hour,
+            minute=settings.reminder_minute,
+            timezone="Asia/Shanghai",
+            id="daily_reminder",
+        )
+        logger.info(
+            "Daily reminder enabled: %02d:%02d CST → %s",
+            settings.reminder_hour, settings.reminder_minute, settings.notify_phone,
+        )
+
     scheduler.start()
     logger.info(
         "App started. Daily analysis scheduled at %02d:%02d",
@@ -203,6 +220,14 @@ async def manual_trigger():
     unmatched = await get_unmatched_conversations()
     report = generate_daily_report(summary, unmatched=unmatched)
     return {"summary": summary, "report": report}
+
+
+@app.post("/api/v1/reminder/trigger", dependencies=[Depends(verify_admin)])
+async def manual_reminder():
+    """Manually trigger the daily follow-up reminder (for testing)."""
+    from app.notifier.daily_reminder import send_daily_reminder
+    sent = await send_daily_reminder()
+    return {"sent": sent}
 
 
 @app.get("/api/v1/stats")

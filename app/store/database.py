@@ -75,6 +75,28 @@ MIGRATIONS = [
     """
     UPDATE conversations SET customer_size = 'big' WHERE is_big_customer = 1 AND (customer_size = '' OR customer_size IS NULL);
     """,
+    # P1b: Intent tags from LLM analysis
+    """
+    ALTER TABLE conversations ADD COLUMN intent_priority TEXT DEFAULT '';
+    """,
+    """
+    ALTER TABLE conversations ADD COLUMN intent_tags TEXT DEFAULT '';
+    """,
+    # P1a: Customer actions table for daily reminders
+    """
+    CREATE TABLE IF NOT EXISTS customer_actions (
+        phone           TEXT NOT NULL,
+        action_date     TEXT NOT NULL,
+        customer_name   TEXT DEFAULT '',
+        today_action    TEXT DEFAULT '',
+        tomorrow_action TEXT DEFAULT '',
+        pending_customer TEXT DEFAULT '',
+        priority        TEXT DEFAULT 'medium',
+        summary         TEXT DEFAULT '',
+        created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (phone, action_date)
+    );
+    """,
 ]
 
 

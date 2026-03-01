@@ -192,6 +192,61 @@ async def get_ai_disabled_list() -> list[dict]:
         return [dict(row) for row in await cursor.fetchall()]
 
 
+async def update_intent(phone: str, priority: str, tags: str) -> None:
+    """Store LLM-extracted intent priority and tags."""
+    async with get_db() as db:
+        await db.execute(
+            "UPDATE conversations SET intent_priority = ?, intent_tags = ? WHERE phone = ?",
+            (priority, tags, phone),
+        )
+        await db.commit()
+
+
+async def upsert_customer_action(
+    phone: str, action_date: str, customer_name: str,
+    today_action: str, tomorrow_action: str, pending_customer: str,
+    priority: str, summary: str,
+) -> None:
+    """Insert or replace customer actions for a given date."""
+    async with get_db() as db:
+        await db.execute(
+            """INSERT OR REPLACE INTO customer_actions
+               (phone, action_date, customer_name, today_action, tomorrow_action,
+                pending_customer, priority, summary)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (phone, action_date, customer_name, today_action,
+             tomorrow_action, pending_customer, priority, summary),
+        )
+        await db.commit()
+
+
+async def get_pending_actions(action_date: str) -> list[dict]:
+    """Get all customer actions for a given date that have non-empty fields."""
+    async with get_db() as db:
+        cursor = await db.execute(
+            """SELECT * FROM customer_actions
+               WHERE action_date = ?
+                 AND (today_action != '' OR pending_customer != '')
+               ORDER BY
+                 CASE priority WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
+                 customer_name""",
+            (action_date,),
+        )
+        return [dict(row) for row in await cursor.fetchall()]
+
+
+async def get_yesterday_tomorrow_actions(yesterday: str) -> list[dict]:
+    """Get yesterday's 'tomorrow' actions (they become today's tasks)."""
+    async with get_db() as db:
+        cursor = await db.execute(
+            """SELECT * FROM customer_actions
+               WHERE action_date = ? AND tomorrow_action != ''
+               ORDER BY customer_name""",
+            (yesterday,),
+        )
+        return [dict(row) for row in await cursor.fetchall()]
+
+
 async def get_customer_context(phone: str) -> dict:
     """Build customer context from local SQLite data (zero API calls).
 

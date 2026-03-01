@@ -14,13 +14,30 @@ from app.analyzer.prompts import (
 logger = logging.getLogger(__name__)
 
 
+# Minimum text messages required for meaningful analysis
+_MIN_TEXT_MESSAGES = 2
+
+
 async def analyze_conversation(
     messages: list[dict],
     customer_name: str,
     phone: str,
 ) -> dict | None:
-    """Analyze a list of messages for one customer and return structured JSON."""
+    """Analyze a list of messages for one customer and return structured JSON.
+
+    Returns None if messages are empty or have fewer than _MIN_TEXT_MESSAGES
+    text messages (media-only conversations can't produce useful analysis).
+    """
     if not messages:
+        return None
+
+    # Check minimum text content — media-only conversations produce garbage
+    text_msgs = [m for m in messages if m.get("msg_type") == "text" and (m.get("content") or "").strip()]
+    if len(text_msgs) < _MIN_TEXT_MESSAGES:
+        logger.info(
+            "Skipping %s (%s): only %d text messages (need %d), %d total messages",
+            customer_name, phone, len(text_msgs), _MIN_TEXT_MESSAGES, len(messages),
+        )
         return None
 
     conversation_text = build_conversation_text(messages)
