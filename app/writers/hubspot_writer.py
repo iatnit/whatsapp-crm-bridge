@@ -12,6 +12,7 @@ from datetime import datetime, timezone, timedelta
 import httpx
 
 from app.config import settings
+from app.utils.phone import normalize_phone
 
 logger = logging.getLogger(__name__)
 
@@ -37,16 +38,6 @@ def _headers() -> dict:
         "Authorization": f"Bearer {settings.hubspot_access_token}",
         "Content-Type": "application/json",
     }
-
-
-# ── Phone normalization ──────────────────────────────────────────────
-
-def _normalize_phone(phone: str) -> str:
-    """Normalize phone to E.164-ish format: +919876543210."""
-    phone = phone.strip().replace(" ", "").replace("-", "")
-    if not phone.startswith("+"):
-        phone = f"+{phone}"
-    return phone
 
 
 # ── Contact cache & lock ─────────────────────────────────────────────
@@ -86,7 +77,7 @@ async def search_contact_by_phone(phone: str) -> str | None:
 
     Returns contact ID if found, None otherwise.
     """
-    normalized = _normalize_phone(phone)
+    normalized = normalize_phone(phone)
     url = f"{BASE_URL}/crm/v3/objects/contacts/search"
     payload = {
         "filterGroups": [
@@ -136,7 +127,7 @@ async def create_contact(
 
     Returns the new contact ID or None.
     """
-    normalized = _normalize_phone(phone)
+    normalized = normalize_phone(phone)
     # Split name into first/last
     parts = name.strip().split(maxsplit=1) if name else []
     firstname = parts[0] if parts else normalized
@@ -222,7 +213,7 @@ async def ensure_contact(
     Uses lock + cache to prevent concurrent duplicate creation.
     Returns contact ID or None.
     """
-    normalized = _normalize_phone(phone)
+    normalized = normalize_phone(phone)
 
     # Fast path: cache hit
     if normalized in _contact_cache:
@@ -423,7 +414,7 @@ def build_hubspot_properties(
 
     # ── WhatsApp number & lead source (always set) ──
     if phone:
-        normalized = _normalize_phone(phone)
+        normalized = normalize_phone(phone)
         props["whatsapp_number"] = normalized
     props["lead_source_channel"] = "whatsapp"
 
@@ -496,7 +487,7 @@ async def ensure_note(
     """
     cst = timezone(timedelta(hours=8))
     today_str = datetime.now(cst).strftime("%Y-%m-%d")
-    cache_key = f"{_normalize_phone(phone)}|{today_str}"
+    cache_key = f"{normalize_phone(phone)}|{today_str}"
 
     if cache_key in _note_cache:
         logger.info("HubSpot note cache hit for %s, skipping", cache_key)

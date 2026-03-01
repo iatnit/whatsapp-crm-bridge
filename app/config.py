@@ -25,14 +25,17 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     llm_provider: str = "gemini"  # "anthropic" or "gemini"
 
+    # --- Webhook ---
+    webhook_secret: str = ""  # if set, require ?token= on webhook URL
+
     # --- Feishu ---
-    feishu_app_id: str = "cli_a9f0a37109b81cc6"
+    feishu_app_id: str = ""
     feishu_app_secret: str = ""
 
     # Feishu Bitable IDs
-    feishu_app_token: str = "XYeCby15ga5CDKsX57YcFL1Hnce"
-    feishu_table_customers: str = "tbl4kQe0MeodIGGD"
-    feishu_table_followup: str = "tblcftbYX7E0cEUo"
+    feishu_app_token: str = ""
+    feishu_table_customers: str = ""
+    feishu_table_followup: str = ""
 
     # --- HubSpot ---
     hubspot_access_token: str = ""   # Private App access token

@@ -73,6 +73,14 @@ async def receive_webhook(request: Request):
       - id / whatsappMessageId: message ID for dedup
       - data: extra payload for media messages
     """
+    # Token auth: if WEBHOOK_SECRET is set, require matching ?token= param
+    from app.config import settings
+    if settings.webhook_secret:
+        token = request.query_params.get("token", "")
+        if token != settings.webhook_secret:
+            logger.warning("Webhook auth failed from %s", request.client.host)
+            return {"status": "unauthorized"}
+
     try:
         payload: dict[str, Any] = await request.json()
     except Exception as e:

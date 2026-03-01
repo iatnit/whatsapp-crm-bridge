@@ -12,6 +12,7 @@ from datetime import datetime, timezone, timedelta
 import httpx
 
 from app.config import settings
+from app.utils.phone import normalize_phone
 
 logger = logging.getLogger(__name__)
 
@@ -198,9 +199,7 @@ async def search_customer_by_phone(phone: str) -> str | None:
     More reliable than name-based search for dedup.
     Also caches the Feishu 编号 for cross-system sync.
     """
-    normalized = phone.strip().replace(" ", "").replace("-", "")
-    if not normalized.startswith("+"):
-        normalized = f"+{normalized}"
+    normalized = normalize_phone(phone)
 
     items = await _search_records(
         table_id=settings.feishu_table_customers,
@@ -229,9 +228,7 @@ async def create_customer(
     """
     fields: dict = {"客户": name}
     if contact:
-        # Format phone: add "+" prefix for international numbers
-        phone_str = contact if contact.startswith("+") else f"+{contact}"
-        fields["联系电话"] = phone_str
+        fields["联系电话"] = normalize_phone(contact)
     if contact_person:
         fields["联系人"] = contact_person
     if location:
@@ -311,7 +308,7 @@ async def ensure_customer(
     Uses a lock + in-memory cache to prevent concurrent duplicate creation.
     """
     cache_key = name.strip().lower()
-    phone_key = phone.strip().lower() if phone else ""
+    phone_key = normalize_phone(phone) if phone else ""
 
     # Fast path: check caches without lock
     if phone_key and phone_key in _phone_cache:
