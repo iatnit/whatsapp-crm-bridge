@@ -50,8 +50,8 @@ async def update_conversation(phone: str, display_name: str = "") -> None:
         now = datetime.now(timezone.utc).isoformat()
         await db.execute(
             """
-            INSERT INTO conversations (phone, display_name, last_message_at, total_messages)
-            VALUES (?, ?, ?, 1)
+            INSERT INTO conversations (phone, display_name, first_message_at, last_message_at, total_messages)
+            VALUES (?, ?, ?, ?, 1)
             ON CONFLICT(phone) DO UPDATE SET
                 display_name = CASE
                     WHEN excluded.display_name != '' THEN excluded.display_name
@@ -60,7 +60,7 @@ async def update_conversation(phone: str, display_name: str = "") -> None:
                 last_message_at = excluded.last_message_at,
                 total_messages = conversations.total_messages + 1
             """,
-            (phone, display_name, now),
+            (phone, display_name, now, now),
         )
         await db.commit()
 

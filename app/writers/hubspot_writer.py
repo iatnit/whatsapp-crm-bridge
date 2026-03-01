@@ -111,17 +111,20 @@ async def create_contact(
     firstname = parts[0] if parts else normalized
     lastname = parts[1] if len(parts) > 1 else ""
 
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     properties = {
         "phone": normalized,
         "firstname": firstname,
         "lastname": lastname,
         "whatsapp_number": normalized,
         "lead_source_channel": "whatsapp",
+        "first_contact_date": today,
+        "last_contact_date": today,
     }
     if country:
         properties["country"] = country
 
-    # Merge LOCA custom properties
+    # Merge LOCA custom properties (may override first_contact_date if provided)
     if extra:
         properties.update(extra)
 
@@ -207,8 +210,11 @@ async def ensure_contact(
         contact_id = await search_contact_by_phone(phone)
         if contact_id:
             # Update name/country/extra if provided
-            if name or country or extra:
-                await update_contact(contact_id, name=name, country=country, extra=extra)
+            # Remove first_contact_date from updates to preserve original value
+            update_extra = dict(extra) if extra else {}
+            update_extra.pop("first_contact_date", None)
+            if name or country or update_extra:
+                await update_contact(contact_id, name=name, country=country, extra=update_extra or None)
             _contact_cache[normalized] = contact_id
             return contact_id
 
@@ -364,6 +370,10 @@ def build_hubspot_properties(analysis: dict, phone: str) -> dict:
         normalized = _normalize_phone(phone)
         props["whatsapp_number"] = normalized
     props["lead_source_channel"] = "whatsapp"
+
+    # ── Contact dates (last_contact_date always updated) ──
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    props["last_contact_date"] = today
 
     return props
 

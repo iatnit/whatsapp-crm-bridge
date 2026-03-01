@@ -15,15 +15,29 @@ router = APIRouter(prefix="/api/v1")
 
 
 async def _hubspot_upsert_contact(phone: str, display_name: str) -> None:
-    """Fire-and-forget HubSpot contact upsert."""
+    """Fire-and-forget HubSpot contact upsert with first_contact_date."""
     from app.config import settings
     if not settings.hubspot_enabled:
         return
     try:
         from app.writers.hubspot_writer import ensure_contact
-        await ensure_contact(phone, name=display_name)
+        from datetime import datetime, timezone
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        await ensure_contact(
+            phone, name=display_name,
+            extra={"first_contact_date": today, "last_contact_date": today},
+        )
     except Exception as e:
         logger.error("HubSpot upsert failed: %s", e)
+
+
+async def _feishu_ensure_customer(phone: str, display_name: str) -> None:
+    """Fire-and-forget Feishu customer creation on first inbound message."""
+    try:
+        from app.writers.feishu_writer import ensure_customer
+        await ensure_customer(display_name, phone=phone, contact_person=display_name)
+    except Exception as e:
+        logger.error("Feishu real-time customer creation failed: %s", e)
 
 
 @router.post("/webhook")
@@ -130,9 +144,10 @@ async def receive_webhook(request: Request):
         if direction == "outbound":
             notify_outbound(phone)
 
-        # Real-time HubSpot contact upsert (fire-and-forget)
+        # Real-time CRM upsert (fire-and-forget)
         if direction == "inbound" and msg_type not in ("reaction", "sticker"):
             asyncio.create_task(_hubspot_upsert_contact(phone, display_name))
+            asyncio.create_task(_feishu_ensure_customer(phone, display_name))
 
         # Trigger AI auto-reply for inbound messages
         if direction == "inbound" and msg_type not in ("reaction", "sticker"):
