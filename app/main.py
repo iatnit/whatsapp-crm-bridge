@@ -77,6 +77,14 @@ async def lifespan(app: FastAPI):
         settings.daily_analysis_hour,
         settings.daily_analysis_minute,
     )
+
+    # Pre-warm HubSpot cache so first /ai-manager load is instant
+    try:
+        t0 = time.time()
+        contacts = await _get_hubspot_contacts()
+        logger.info("HubSpot cache warmed: %d contacts in %.1fs", len(contacts), time.time() - t0)
+    except Exception:
+        logger.warning("HubSpot cache warm-up failed (will retry on first request)")
     yield
     # Shutdown
     scheduler.shutdown(wait=False)
