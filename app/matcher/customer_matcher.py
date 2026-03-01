@@ -23,9 +23,13 @@ def load_customers() -> dict[str, str]:
         _customer_db = {}
         return _customer_db
 
-    with open(path, encoding="utf-8") as f:
-        _customer_db = json.load(f)
-    logger.info("Loaded %d customers from %s", len(_customer_db), path)
+    try:
+        with open(path, encoding="utf-8") as f:
+            _customer_db = json.load(f)
+        logger.info("Loaded %d customers from %s", len(_customer_db), path)
+    except (json.JSONDecodeError, OSError) as e:
+        logger.error("Failed to load customer JSON from %s: %s", path, e)
+        _customer_db = {}
     return _customer_db
 
 

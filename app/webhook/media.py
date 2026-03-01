@@ -2,6 +2,7 @@
 
 import logging
 import re
+import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from urllib.parse import urlparse
@@ -109,11 +110,19 @@ async def download_media(
         dest: Path = settings.media_dir / filename
         dest.parent.mkdir(parents=True, exist_ok=True)
 
-        # Avoid collision with existing files
-        while dest.exists():
+        # Avoid collision with existing files (max 50 attempts to prevent infinite loop)
+        attempts = 0
+        while dest.exists() and attempts < 50:
             seq = _next_seq(seq_key)
             filename = f"{safe_name}-{date_str}-{seq:02d}{ext}"
             dest = settings.media_dir / filename
+            attempts += 1
+        if dest.exists():
+            # Fallback: use message_id + timestamp for uniqueness
+            ts = int(time.time())
+            filename = f"{safe_name}-{date_str}-{ts}{ext}"
+            dest = settings.media_dir / filename
+            logger.warning("Media filename collision limit reached, using fallback: %s", filename)
 
         dest.write_bytes(resp.content)
 

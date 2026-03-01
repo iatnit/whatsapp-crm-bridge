@@ -83,7 +83,20 @@ async def _call_gemini(user_prompt: str) -> dict | None:
             return None
 
         data = resp.json()
-        text = data["candidates"][0]["content"]["parts"][0]["text"]
+        # Defensive parsing: Gemini response structure may vary
+        candidates = data.get("candidates", [])
+        if not candidates:
+            logger.error("Gemini analysis: no candidates in response")
+            return None
+        content = candidates[0].get("content", {})
+        parts = content.get("parts", [])
+        if not parts:
+            logger.error("Gemini analysis: no parts in candidate")
+            return None
+        text = parts[0].get("text", "")
+        if not text:
+            logger.error("Gemini analysis: empty text in response")
+            return None
         logger.info("Gemini analysis complete (%d chars)", len(text))
         return _parse_llm_text(text)
 

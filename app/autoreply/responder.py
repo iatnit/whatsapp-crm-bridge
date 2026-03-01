@@ -23,6 +23,53 @@ _ai_sent_ts: dict[str, float] = {}  # phone → timestamp when AI last sent (to 
 _human_takeover: dict[str, float] = {}  # phone → timestamp when human took over
 _phone_locks: dict[str, asyncio.Lock] = {}  # phone → lock (prevent concurrent replies)
 _last_reply_text: dict[str, str] = {}  # phone → last reply text (prevent duplicate content)
+_last_cleanup: float = 0  # timestamp of last memory cleanup
+
+
+def _cleanup_stale_entries() -> None:
+    """Remove entries older than 24h from all in-memory dicts.
+
+    Prevents unbounded growth when handling thousands of unique phone numbers.
+    Called at most once per hour.
+    """
+    global _last_cleanup
+    now = time.time()
+    if (now - _last_cleanup) < 3600:
+        return
+    _last_cleanup = now
+
+    cutoff = now - 86400  # 24 hours ago
+    stale_count = 0
+
+    for cache in (_last_reply_ts, _ai_sent_ts, _human_takeover):
+        stale = [k for k, v in cache.items() if v < cutoff]
+        for k in stale:
+            del cache[k]
+        stale_count += len(stale)
+
+    # _hourly_counts: remove entries with all timestamps expired
+    stale_hourly = [k for k, v in _hourly_counts.items() if not v or max(v) < cutoff]
+    for k in stale_hourly:
+        del _hourly_counts[k]
+    stale_count += len(stale_hourly)
+
+    # _phone_locks: remove unlocked locks for stale phones
+    stale_locks = [
+        k for k in _phone_locks
+        if k not in _last_reply_ts and not _phone_locks[k].locked()
+    ]
+    for k in stale_locks:
+        del _phone_locks[k]
+    stale_count += len(stale_locks)
+
+    # _last_reply_text: remove for phones with no recent activity
+    stale_text = [k for k in _last_reply_text if k not in _last_reply_ts]
+    for k in stale_text:
+        del _last_reply_text[k]
+    stale_count += len(stale_text)
+
+    if stale_count:
+        logger.info("Auto-reply memory cleanup: removed %d stale entries", stale_count)
 
 
 def _check_cooldown(phone: str) -> bool:
@@ -134,7 +181,12 @@ async def _call_gemini(system_prompt: str, user_prompt: str) -> str | None:
             logger.error("Gemini auto-reply: no candidates")
             return None
 
-        text = candidates[0]["content"]["parts"][0]["text"].strip()
+        content = candidates[0].get("content", {})
+        parts = content.get("parts", [])
+        if not parts or not parts[0].get("text"):
+            logger.error("Gemini auto-reply: empty content/parts in response")
+            return None
+        text = parts[0]["text"].strip()
         # Remove any markdown formatting that might slip through
         if text.startswith("```"):
             text = text.split("\n", 1)[1] if "\n" in text else text[3:]
@@ -182,6 +234,9 @@ async def handle_auto_reply(
     """
     if not settings.auto_reply_enabled:
         return
+
+    # Periodic cleanup of stale in-memory entries (at most once/hour)
+    _cleanup_stale_entries()
 
     if not settings.gemini_api_key:
         logger.warning("Auto-reply enabled but GEMINI_API_KEY not set")
