@@ -57,7 +57,7 @@ def _build_reminder_content(
     # Hot leads
     hot = [a for a in today_actions if a["priority"] == "high"]
     if hot:
-        lines.append([{"tag": "text", "text": "🔥 热线索", "style": ["bold"]}])
+        lines.append([{"tag": "text", "text": "🔥 热线索\n"}])
         for a in hot:
             name = a["customer_name"] or a["phone"]
             text = f"  • {name}: {a['summary']}"
@@ -71,7 +71,7 @@ def _build_reminder_content(
     # Normal actions
     normal = [a for a in today_actions if a["priority"] != "high"]
     if normal:
-        lines.append([{"tag": "text", "text": "📌 今日待办", "style": ["bold"]}])
+        lines.append([{"tag": "text", "text": "📌 今日待办\n"}])
         for a in normal:
             name = a["customer_name"] or a["phone"]
             parts = []
@@ -87,7 +87,7 @@ def _build_reminder_content(
     today_phones = {a["phone"] for a in today_actions}
     carry_new = [c for c in carry_items if c["phone"] not in today_phones]
     if carry_new:
-        lines.append([{"tag": "text", "text": "📎 昨日延续", "style": ["bold"]}])
+        lines.append([{"tag": "text", "text": "📎 昨日延续\n"}])
         for a in carry_new:
             name = a["customer_name"] or a["phone"]
             lines.append([{"tag": "text", "text": f"  • {name}: {a['tomorrow_action']}"}])
