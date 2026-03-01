@@ -261,6 +261,16 @@ async def run_daily_pipeline() -> dict:
             feishu_number = ""
             if record_id:
                 feishu_number = get_customer_number(record_id) or ""
+            # Normalize next_actions: LLM returns dict {today, tomorrow, pending_customer}
+            raw_actions = analysis.get("next_actions", [])
+            if isinstance(raw_actions, dict):
+                action_list = []
+                for key, label in [("today", ""), ("tomorrow", "明天: "), ("pending_customer", "(waiting) ")]:
+                    val = raw_actions.get(key, "")
+                    if val:
+                        action_list.append(f"{label}{val}")
+                raw_actions = action_list
+
             await forward_summary_to_obsidian(
                 customer_name=feishu_name,
                 phone=phone,
@@ -273,7 +283,7 @@ async def run_daily_pipeline() -> dict:
                 followup_title=analysis.get("followup_title", ""),
                 followup_detail=analysis.get("followup_detail", ""),
                 recommended_codes=analysis.get("recommended_codes", []),
-                next_actions=analysis.get("next_actions", []),
+                next_actions=raw_actions,
                 tags=analysis.get("tags", []),
                 date=datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d"),
             )
