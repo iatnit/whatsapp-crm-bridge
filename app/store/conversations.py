@@ -1,8 +1,33 @@
 """Conversation-level queries and customer matching updates."""
 
 import time
+from datetime import datetime, timezone
 
 from app.store.database import get_db
+
+
+def _parse_first_message_ts(value) -> float:
+    """Parse first_message_at into a Unix timestamp.
+
+    Handles ISO strings, SQLite datetime strings, and numeric values.
+    Returns 0 if parsing fails.
+    """
+    if not value:
+        return 0
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        # Try ISO format first (e.g. "2026-02-28T15:00:00+00:00")
+        for fmt in ("%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%S.%f%z",
+                     "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S"):
+            try:
+                dt = datetime.strptime(value, fmt)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                return dt.timestamp()
+            except ValueError:
+                continue
+    return 0
 
 
 async def get_all_conversations() -> list[dict]:
@@ -185,12 +210,8 @@ async def get_customer_context(phone: str) -> dict:
         is_known = conv["match_status"] == "matched" and bool(customer_name)
 
         # Calculate days since first contact
-        first_at = conv["first_message_at"]
-        if first_at:
-            first_ts = first_at if isinstance(first_at, (int, float)) else 0
-            first_seen_days = max(0, int((time.time() - first_ts) / 86400)) if first_ts else 0
-        else:
-            first_seen_days = 0
+        first_ts = _parse_first_message_ts(conv["first_message_at"])
+        first_seen_days = max(0, int((time.time() - first_ts) / 86400)) if first_ts else 0
 
         # Determine relationship stage
         if total <= 2:

@@ -217,20 +217,30 @@ async def run_daily_pipeline() -> dict:
                 feishu_name, phone=phone, location=location,
                 contact_person=display_name,
             )
-            if not record_id:
+        except Exception as e:
+            logger.error("Feishu ensure_customer error for %s: %s", customer_name, e)
+            errors.append(f"Feishu customer error for {customer_name}: {e}")
+            await enqueue("feishu", "ensure_customer", {
+                "name": feishu_name, "phone": phone,
+                "location": location, "contact_person": display_name,
+            }, str(e))
+
+        if not record_id:
+            if record_id is None and not errors[-1:]:
                 errors.append(f"Failed to create/find Feishu customer for {feishu_name}")
                 await enqueue("feishu", "ensure_customer", {
                     "name": feishu_name, "phone": phone,
                     "location": location, "contact_person": display_name,
                 }, "record_id was None")
-            else:
-                # Update match_status if conversation was unmatched
-                match_status = conv.get("match_status", "")
-                if match_status in ("unmatched", "", None):
-                    await update_customer_match(
-                        phone, record_id, feishu_name, "auto_created"
-                    )
-                    logger.info("Auto-created customer '%s' for %s", feishu_name, phone)
+        else:
+            # Update match_status if conversation was unmatched
+            match_status = conv.get("match_status", "")
+            if match_status in ("unmatched", "", None):
+                await update_customer_match(
+                    phone, record_id, feishu_name, "auto_created"
+                )
+                logger.info("Auto-created customer '%s' for %s", feishu_name, phone)
+            try:
                 followup_id = await ensure_followup(
                     customer_record_id=record_id,
                     customer_name=feishu_name,
@@ -246,13 +256,9 @@ async def run_daily_pipeline() -> dict:
                     logger.info("Feishu followup created: %s for %s", followup_id, feishu_name)
                 else:
                     errors.append(f"Failed to create followup for {feishu_name}")
-        except Exception as e:
-            logger.error("Feishu write error for %s: %s", customer_name, e)
-            errors.append(f"Feishu error for {customer_name}: {e}")
-            await enqueue("feishu", "ensure_customer", {
-                "name": feishu_name, "phone": phone,
-                "location": location, "contact_person": display_name,
-            }, str(e))
+            except Exception as e:
+                logger.error("Feishu ensure_followup error for %s: %s", customer_name, e)
+                errors.append(f"Feishu followup error for {customer_name}: {e}")
 
         # Obsidian 详细总结（fire-and-forget）
         try:

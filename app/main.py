@@ -271,11 +271,9 @@ async def list_ai_customers():
     for c in convs:
         # Inline relationship_stage calc (avoids N+1 DB queries)
         total = c.get("total_messages") or 0
-        first_at = c.get("first_message_at")
-        if first_at and isinstance(first_at, (int, float)) and first_at > 0:
-            first_seen_days = max(0, int((time.time() - first_at) / 86400))
-        else:
-            first_seen_days = 0
+        from app.store.conversations import _parse_first_message_ts
+        first_ts = _parse_first_message_ts(c.get("first_message_at"))
+        first_seen_days = max(0, int((time.time() - first_ts) / 86400)) if first_ts else 0
 
         if total <= 2:
             rel_stage = "new"

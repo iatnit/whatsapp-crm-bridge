@@ -482,6 +482,59 @@ async def create_note(
     return note_id
 
 
+async def _search_today_note(contact_id: str, today_str: str) -> str | None:
+    """Check HubSpot API for an existing note on this contact today.
+
+    Returns note ID if found, None otherwise.
+    """
+    # Search notes created today associated with this contact
+    url = f"{BASE_URL}/crm/v3/objects/notes/search"
+    # hs_timestamp range: start of day to end of day (UTC-approx, wide enough for CST)
+    payload = {
+        "filterGroups": [
+            {
+                "filters": [
+                    {
+                        "propertyName": "hs_timestamp",
+                        "operator": "GTE",
+                        "value": f"{today_str}T00:00:00Z",
+                    },
+                    {
+                        "propertyName": "hs_timestamp",
+                        "operator": "LTE",
+                        "value": f"{today_str}T23:59:59Z",
+                    },
+                ]
+            }
+        ],
+        "properties": ["hs_note_body", "hs_timestamp"],
+        "limit": 5,
+    }
+
+    client = _get_http()
+    try:
+        resp = await client.post(url, json=payload, headers=_headers())
+        if resp.status_code != 200:
+            logger.debug("HubSpot note search failed [%d], skipping dedup", resp.status_code)
+            return None
+
+        # Filter results by association with this contact
+        for note in resp.json().get("results", []):
+            note_id = note.get("id")
+            # Check if this note is associated with our contact
+            assoc_url = f"{BASE_URL}/crm/v4/objects/notes/{note_id}/associations/contacts"
+            assoc_resp = await client.get(assoc_url, headers=_headers())
+            if assoc_resp.status_code == 200:
+                for result in assoc_resp.json().get("results", []):
+                    if str(result.get("toObjectId")) == str(contact_id):
+                        logger.info("HubSpot found existing note %s for contact %s on %s", note_id, contact_id, today_str)
+                        return note_id
+    except Exception as e:
+        logger.debug("HubSpot note search error (non-blocking): %s", e)
+
+    return None
+
+
 async def ensure_note(
     contact_id: str,
     phone: str,
@@ -491,15 +544,22 @@ async def ensure_note(
 ) -> str | None:
     """Create a note with per-day dedup (one note per phone per day).
 
-    Uses in-memory cache to avoid duplicates within the same pipeline run.
+    Uses in-memory cache first, then falls back to HubSpot API search.
     """
     cst = timezone(timedelta(hours=8))
     today_str = datetime.now(cst).strftime("%Y-%m-%d")
     cache_key = f"{normalize_phone(phone)}|{today_str}"
 
+    # Level 1: in-memory cache
     if cache_key in _note_cache:
         logger.info("HubSpot note cache hit for %s, skipping", cache_key)
         return _note_cache[cache_key]
+
+    # Level 2: API-level dedup (survives pipeline restarts)
+    existing_id = await _search_today_note(contact_id, today_str)
+    if existing_id:
+        _note_cache[cache_key] = existing_id
+        return existing_id
 
     note_id = await create_note(contact_id, title=title, body=detail, summary=summary)
     if note_id:
