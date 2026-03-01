@@ -1,5 +1,6 @@
-"""Daily analysis pipeline: aggregate → analyze → write to Feishu."""
+"""Daily analysis pipeline: aggregate → analyze → write to Feishu & HubSpot."""
 
+import json
 import logging
 from datetime import datetime, timedelta, timezone
 from itertools import groupby
@@ -12,6 +13,7 @@ from app.store.conversations import (
     get_unmatched_conversations,
     update_customer_match,
 )
+from app.store.retry_queue import enqueue, get_pending, mark_success, mark_retried, cleanup_old
 from app.matcher.customer_matcher import match_all_unmatched, load_customers
 from app.analyzer.claude_analyzer import analyze_conversation
 from app.config import settings
@@ -19,6 +21,7 @@ from app.writers.feishu_writer import ensure_customer, ensure_followup, clear_cu
 from app.writers.hubspot_writer import (
     ensure_contact as hubspot_ensure_contact,
     ensure_note as hubspot_ensure_note,
+    create_deal as hubspot_create_deal,
     clear_contact_cache as hubspot_clear_cache,
     build_hubspot_properties,
 )
@@ -68,6 +71,48 @@ async def _auto_create_unmatched(
     return count
 
 
+async def _process_retry_queue() -> int:
+    """Retry previously failed CRM writes. Returns count of recovered items."""
+    pending = await get_pending()
+    if not pending:
+        return 0
+
+    logger.info("Retrying %d failed writes", len(pending))
+    recovered = 0
+
+    for item in pending:
+        item_id = item["id"]
+        target = item["target"]
+        operation = item["operation"]
+        args = json.loads(item["args_json"])
+
+        try:
+            if target == "feishu" and operation == "ensure_customer":
+                result = await ensure_customer(**args)
+                if result:
+                    await mark_success(item_id)
+                    recovered += 1
+                    logger.info("Retry OK: feishu.ensure_customer(%s)", args.get("name"))
+                else:
+                    await mark_retried(item_id, "returned None")
+            elif target == "hubspot" and operation == "ensure_contact":
+                result = await hubspot_ensure_contact(**args)
+                if result:
+                    await mark_success(item_id)
+                    recovered += 1
+                    logger.info("Retry OK: hubspot.ensure_contact(%s)", args.get("phone"))
+                else:
+                    await mark_retried(item_id, "returned None")
+            else:
+                logger.warning("Unknown retry target: %s.%s", target, operation)
+                await mark_retried(item_id, f"unknown operation: {target}.{operation}")
+        except Exception as e:
+            logger.error("Retry failed for %s.%s: %s", target, operation, e)
+            await mark_retried(item_id, str(e))
+
+    return recovered
+
+
 async def run_daily_pipeline() -> dict:
     """Main daily analysis entry point.
 
@@ -85,6 +130,16 @@ async def run_daily_pipeline() -> dict:
     # Clear caches to ensure fresh lookups each run
     clear_customer_cache()
     hubspot_clear_cache()
+
+    # Step 0: Retry previously failed writes
+    retry_count = await _process_retry_queue()
+    if retry_count:
+        logger.info("Retry queue: %d items recovered", retry_count)
+
+    # Clean up old retry records (>7 days)
+    cleaned = await cleanup_old(days=7)
+    if cleaned:
+        logger.info("Cleaned %d old retry records", cleaned)
 
     # Step 1: Refresh customer DB and match unmatched conversations
     load_customers()
@@ -160,6 +215,10 @@ async def run_daily_pipeline() -> dict:
             )
             if not record_id:
                 errors.append(f"Failed to create/find Feishu customer for {feishu_name}")
+                await enqueue("feishu", "ensure_customer", {
+                    "name": feishu_name, "phone": phone,
+                    "location": location, "contact_person": display_name,
+                }, "record_id was None")
             else:
                 # Update match_status if conversation was unmatched
                 match_status = conv.get("match_status", "")
@@ -186,9 +245,14 @@ async def run_daily_pipeline() -> dict:
         except Exception as e:
             logger.error("Feishu write error for %s: %s", customer_name, e)
             errors.append(f"Feishu error for {customer_name}: {e}")
+            await enqueue("feishu", "ensure_customer", {
+                "name": feishu_name, "phone": phone,
+                "location": location, "contact_person": display_name,
+            }, str(e))
 
         # HubSpot 写入（独立于飞书，互不阻塞）
         hubspot_written = False
+        hs_contact_id = None
         if settings.hubspot_enabled:
             try:
                 total_msgs = conv.get("total_messages", 0) or len(msgs)
@@ -204,6 +268,29 @@ async def run_daily_pipeline() -> dict:
                     hubspot_written = bool(hs_note_id)
             except Exception as e:
                 logger.error("HubSpot error for %s: %s", customer_name, e)
+                await enqueue("hubspot", "ensure_contact", {
+                    "phone": phone, "name": feishu_name, "country": location,
+                }, str(e))
+
+        # HubSpot Deal 创建（当LLM检测到确认订单时）
+        order_info = analysis.get("order_info", {})
+        if order_info.get("order_confirmed") and settings.hubspot_enabled and hs_contact_id:
+            try:
+                order_desc = order_info.get("order_description", "")
+                order_products = order_info.get("order_products", [])
+                deal_name = f"{feishu_name} - {order_desc or ', '.join(order_products) or 'WhatsApp订单'}"
+                deal_id = await hubspot_create_deal(
+                    contact_id=hs_contact_id,
+                    deal_name=deal_name,
+                    stage="closedwon",
+                )
+                if deal_id:
+                    logger.info("HubSpot deal created: %s for %s", deal_id, feishu_name)
+                    # Also update customer stage to ordered
+                    from app.writers.hubspot_writer import update_contact
+                    await update_contact(hs_contact_id, extra={"customer_stage": "ordered"})
+            except Exception as e:
+                logger.error("HubSpot deal creation error for %s: %s", customer_name, e)
 
         results.append({
             "phone": phone,
@@ -231,6 +318,7 @@ async def run_daily_pipeline() -> dict:
         "written": written_count,
         "new_matches": len(match_results),
         "auto_created": auto_created,
+        "retried": retry_count,
         "errors": errors,
         "results": results,
     }

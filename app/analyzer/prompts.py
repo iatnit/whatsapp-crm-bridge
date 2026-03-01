@@ -55,6 +55,11 @@ ANALYSIS_PROMPT_TEMPLATE = """\
     "competitor_mentioned": ["amy", "coco", "yang", "preciosa", "其他名称"],
     "moq_qualified": true 或 false 或 null,
     "price_sensitivity": "high / medium / low / unknown"
+  }},
+  "order_info": {{
+    "order_confirmed": false,
+    "order_products": [],
+    "order_description": ""
   }}
 }}
 
@@ -70,6 +75,9 @@ ANALYSIS_PROMPT_TEMPLATE = """\
 - crm_fields.competitor_mentioned: 如提到竞品供应商（amy/coco/yang/preciosa等），列出；未提到返回空数组
 - crm_fields.moq_qualified: 如客户需求量达到50000米或50箱以上→true，明确低于→false，未提到→null
 - crm_fields.price_sensitivity: 频繁砍价→high，讨论但可接受→medium，不太关注价格→low，未涉及→unknown
+- order_info.order_confirmed: 客户明确下单/确认订单/说了"I want to order"/"please arrange"/"confirmed"等→true，仅询价或讨论→false
+- order_info.order_products: 如果确认下单，列出确认的产品编码（如 ["DR14-6mm", "DS40-24x40"]），未下单则留空数组
+- order_info.order_description: 如果确认下单，简述订单内容（如 "DR14-6mm 红色 100米 + DS40 透明 50张"），未下单则留空
 - 只返回 JSON 对象，不要 markdown 代码块\
 """
 

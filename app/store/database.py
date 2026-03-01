@@ -73,6 +73,10 @@ async def init_db() -> None:
             except Exception:
                 pass  # Column already exists
 
+    # Initialize retry queue table
+    from app.store.retry_queue import init_retry_table
+    await init_retry_table()
+
     logger.info("Database initialized at %s", settings.db_path)
 
 
