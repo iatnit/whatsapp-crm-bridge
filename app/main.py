@@ -78,13 +78,18 @@ async def lifespan(app: FastAPI):
         settings.daily_analysis_minute,
     )
 
-    # Pre-warm HubSpot cache so first /ai-manager load is instant
+    # Load HubSpot cache from disk (instant); fetch from API only if no local file
     try:
         t0 = time.time()
         contacts = await _get_hubspot_contacts()
-        logger.info("HubSpot cache warmed: %d contacts in %.1fs", len(contacts), time.time() - t0)
+        if contacts:
+            logger.info("HubSpot cache loaded: %d contacts in %.1fs", len(contacts), time.time() - t0)
+        else:
+            logger.info("No local HubSpot cache, fetching from API...")
+            contacts = await _refresh_hubspot_contacts()
+            logger.info("HubSpot fetched: %d contacts in %.1fs", len(contacts), time.time() - t0)
     except Exception:
-        logger.warning("HubSpot cache warm-up failed (will retry on first request)")
+        logger.warning("HubSpot cache init failed (use Refresh button)")
     yield
     # Shutdown
     scheduler.shutdown(wait=False)
@@ -173,10 +178,9 @@ async def sync_check():
 
 _ai_manager_html: str | None = None
 
-# HubSpot contact cache (TTL 300s)
+# HubSpot contact cache — persisted to data/hubspot_contacts.json
 _hubspot_cache: list[dict] | None = None
-_hubspot_cache_ts: float = 0
-_HUBSPOT_CACHE_TTL = 1800
+_HUBSPOT_CACHE_FILE = Path(__file__).parent.parent / "data" / "hubspot_contacts.json"
 
 _VALID_TAGS = {"hot_lead", "vip", "repeat_buyer", "first_timer", "price_shopper", "risky", "agent_potential"}
 
@@ -186,14 +190,45 @@ def _digits(phone: str) -> str:
     return re.sub(r"\D", "", phone or "")
 
 
+def _load_hubspot_from_disk() -> list[dict] | None:
+    """Load cached HubSpot contacts from local JSON file."""
+    try:
+        if _HUBSPOT_CACHE_FILE.exists():
+            import json
+            data = json.loads(_HUBSPOT_CACHE_FILE.read_text())
+            logger.info("Loaded %d HubSpot contacts from disk cache", len(data))
+            return data
+    except Exception:
+        logger.warning("Failed to read HubSpot disk cache, will fetch from API")
+    return None
+
+
+def _save_hubspot_to_disk(contacts: list[dict]) -> None:
+    """Persist HubSpot contacts to local JSON file."""
+    try:
+        import json
+        _HUBSPOT_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _HUBSPOT_CACHE_FILE.write_text(json.dumps(contacts, ensure_ascii=False))
+        logger.info("Saved %d HubSpot contacts to disk cache", len(contacts))
+    except Exception:
+        logger.warning("Failed to write HubSpot disk cache")
+
+
 async def _get_hubspot_contacts() -> list[dict]:
-    """Return cached HubSpot contacts, refreshing if stale."""
-    global _hubspot_cache, _hubspot_cache_ts
-    if _hubspot_cache is not None and (time.time() - _hubspot_cache_ts) < _HUBSPOT_CACHE_TTL:
+    """Return in-memory HubSpot contacts. Load from disk on first call."""
+    global _hubspot_cache
+    if _hubspot_cache is not None:
         return _hubspot_cache
+    _hubspot_cache = _load_hubspot_from_disk() or []
+    return _hubspot_cache
+
+
+async def _refresh_hubspot_contacts() -> list[dict]:
+    """Pull fresh contacts from HubSpot API, update memory + disk."""
+    global _hubspot_cache
     from app.writers.hubspot_writer import list_all_contacts
     _hubspot_cache = await list_all_contacts()
-    _hubspot_cache_ts = time.time()
+    _save_hubspot_to_disk(_hubspot_cache)
     return _hubspot_cache
 
 
@@ -355,17 +390,25 @@ async def update_tags(phone: str, payload: dict):
     if not ok:
         return JSONResponse({"error": "HubSpot update failed"}, status_code=502)
 
-    # Invalidate cache so next list reflects the change
-    _hubspot_cache = None
+    # Update local cache in-place so no full re-fetch needed
+    if _hubspot_cache:
+        phone_digits = _digits(phone)
+        for h in _hubspot_cache:
+            for field in ("phone", "whatsapp_number"):
+                if _digits(h.get(field) or "") == phone_digits:
+                    h["customer_tags"] = tags_str
+                    break
+        _save_hubspot_to_disk(_hubspot_cache)
     return {"status": "ok", "phone": phone, "tags": tags_str}
 
 
 @app.post("/api/v1/ai/refresh")
 async def refresh_cache():
-    """Force-clear the HubSpot contact cache."""
-    global _hubspot_cache
-    _hubspot_cache = None
-    return {"status": "ok", "message": "Cache cleared"}
+    """Pull fresh HubSpot contacts and update local cache."""
+    t0 = time.time()
+    contacts = await _refresh_hubspot_contacts()
+    elapsed = round(time.time() - t0, 1)
+    return {"status": "ok", "count": len(contacts), "seconds": elapsed}
 
 
 @app.post("/api/v1/send")
