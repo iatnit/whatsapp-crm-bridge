@@ -6,6 +6,17 @@ from datetime import datetime, timezone
 from app.store.database import get_db
 
 
+def calc_relationship_stage(total_messages: int, first_seen_days: int) -> str:
+    """Determine relationship stage from message count and days since first contact."""
+    if total_messages <= 2:
+        return "new"
+    elif total_messages <= 10 or first_seen_days <= 3:
+        return "early"
+    elif total_messages <= 50 or first_seen_days <= 30:
+        return "developing"
+    return "established"
+
+
 def _parse_first_message_ts(value) -> float:
     """Parse first_message_at into a Unix timestamp.
 
@@ -213,15 +224,7 @@ async def get_customer_context(phone: str) -> dict:
         first_ts = _parse_first_message_ts(conv["first_message_at"])
         first_seen_days = max(0, int((time.time() - first_ts) / 86400)) if first_ts else 0
 
-        # Determine relationship stage
-        if total <= 2:
-            stage = "new"
-        elif total <= 10 or first_seen_days <= 3:
-            stage = "early"
-        elif total <= 50 or first_seen_days <= 30:
-            stage = "developing"
-        else:
-            stage = "established"
+        stage = calc_relationship_stage(total, first_seen_days)
 
         return {
             "is_known": is_known,

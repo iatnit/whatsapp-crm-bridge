@@ -3,9 +3,8 @@
 import json
 import logging
 
-import httpx
-
 from app.config import settings
+from app.llm.gemini import call_gemini
 from app.analyzer.prompts import (
     SYSTEM_PROMPT,
     ANALYSIS_PROMPT_TEMPLATE,
@@ -44,7 +43,6 @@ async def analyze_conversation(
 def _parse_llm_text(text: str) -> dict | None:
     """Strip markdown fences and parse JSON from LLM response."""
     text = text.strip()
-    # Strip ```json ... ``` fences
     if text.startswith("```"):
         text = text.split("\n", 1)[1] if "\n" in text else text[3:]
     if text.endswith("```"):
@@ -59,50 +57,18 @@ def _parse_llm_text(text: str) -> dict | None:
 
 
 async def _call_gemini(user_prompt: str) -> dict | None:
-    """Call Google Gemini API."""
-    url = (
-        f"https://generativelanguage.googleapis.com/v1beta/models/"
-        f"gemini-2.5-flash:generateContent?key={settings.gemini_api_key}"
+    """Call Gemini with JSON mode for structured analysis."""
+    text = await call_gemini(
+        system_prompt=SYSTEM_PROMPT,
+        user_prompt=user_prompt,
+        json_mode=True,
+        max_tokens=2048,
+        timeout=60,
     )
-    payload = {
-        "system_instruction": {"parts": [{"text": SYSTEM_PROMPT}]},
-        "contents": [{"parts": [{"text": user_prompt}]}],
-        "generationConfig": {
-            "temperature": 0.3,
-            "maxOutputTokens": 2048,
-            "responseMimeType": "application/json",
-        },
-    }
-
-    try:
-        async with httpx.AsyncClient(timeout=60) as client:
-            resp = await client.post(url, json=payload)
-
-        if resp.status_code != 200:
-            logger.error("Gemini API error %d: %s", resp.status_code, resp.text[:500])
-            return None
-
-        data = resp.json()
-        # Defensive parsing: Gemini response structure may vary
-        candidates = data.get("candidates", [])
-        if not candidates:
-            logger.error("Gemini analysis: no candidates in response")
-            return None
-        content = candidates[0].get("content", {})
-        parts = content.get("parts", [])
-        if not parts:
-            logger.error("Gemini analysis: no parts in candidate")
-            return None
-        text = parts[0].get("text", "")
-        if not text:
-            logger.error("Gemini analysis: empty text in response")
-            return None
-        logger.info("Gemini analysis complete (%d chars)", len(text))
-        return _parse_llm_text(text)
-
-    except Exception as e:
-        logger.error("Gemini API call failed: %s", e)
+    if not text:
         return None
+    logger.info("Gemini analysis complete (%d chars)", len(text))
+    return _parse_llm_text(text)
 
 
 async def _call_anthropic(user_prompt: str) -> dict | None:

@@ -27,6 +27,7 @@ class Settings(BaseSettings):
 
     # --- Webhook ---
     webhook_secret: str = ""  # if set, require ?token= on webhook URL
+    admin_token: str = ""     # if set, require Authorization: Bearer <token> on admin endpoints
 
     # --- Feishu ---
     feishu_app_id: str = ""

@@ -6,9 +6,8 @@ import time
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 
-import httpx
-
 from app.config import settings
+from app.llm.gemini import call_gemini
 from app.store.messages import get_messages_by_phone
 from app.store.conversations import get_customer_context, is_ai_disabled
 from app.webhook.sender import send_text_message
@@ -198,52 +197,22 @@ async def _call_anthropic_reply(system_prompt: str, user_prompt: str) -> str | N
         return None
 
 
-async def _call_gemini(system_prompt: str, user_prompt: str) -> str | None:
-    """Call Gemini API and return the reply text."""
-    url = (
-        f"https://generativelanguage.googleapis.com/v1beta/models/"
-        f"gemini-2.5-flash:generateContent?key={settings.gemini_api_key}"
+async def _call_gemini_reply(system_prompt: str, user_prompt: str) -> str | None:
+    """Call Gemini API for auto-reply (text mode, shorter output)."""
+    text = await call_gemini(
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        max_tokens=settings.auto_reply_max_tokens,
+        timeout=30,
     )
-    payload = {
-        "system_instruction": {"parts": [{"text": system_prompt}]},
-        "contents": [{"parts": [{"text": user_prompt}]}],
-        "generationConfig": {
-            "temperature": 0.3,
-            "maxOutputTokens": settings.auto_reply_max_tokens,
-        },
-    }
-
-    try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(url, json=payload)
-
-        if resp.status_code != 200:
-            logger.error("Gemini auto-reply error %d: %s", resp.status_code, resp.text[:300])
-            return None
-
-        data = resp.json()
-        candidates = data.get("candidates", [])
-        if not candidates:
-            logger.error("Gemini auto-reply: no candidates")
-            return None
-
-        content = candidates[0].get("content", {})
-        parts = content.get("parts", [])
-        if not parts or not parts[0].get("text"):
-            logger.error("Gemini auto-reply: empty content/parts in response")
-            return None
-        text = parts[0]["text"].strip()
-        # Remove any markdown formatting that might slip through
-        if text.startswith("```"):
-            text = text.split("\n", 1)[1] if "\n" in text else text[3:]
-        if text.endswith("```"):
-            text = text.rsplit("```", 1)[0].strip()
-
-        return text
-
-    except Exception as e:
-        logger.error("Gemini auto-reply call failed: %s", e)
+    if not text:
         return None
+    # Remove any markdown formatting that might slip through
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1] if "\n" in text else text[3:]
+    if text.endswith("```"):
+        text = text.rsplit("```", 1)[0].strip()
+    return text
 
 
 _MAX_PHONE_LOCKS = 5000
@@ -394,7 +363,7 @@ async def handle_auto_reply(
         )
 
         # Call LLM (Gemini primary, Anthropic fallback)
-        reply_text = await _call_gemini(system_prompt, user_prompt)
+        reply_text = await _call_gemini_reply(system_prompt, user_prompt)
         if not reply_text and settings.anthropic_api_key:
             logger.warning("Gemini failed for %s, falling back to Anthropic", phone)
             reply_text = await _call_anthropic_reply(system_prompt, user_prompt)

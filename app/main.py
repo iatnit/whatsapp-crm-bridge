@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from app.config import settings
@@ -25,6 +25,22 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# ── Admin auth dependency ─────────────────────────────────────────────
+
+async def verify_admin(authorization: str = Header(default="")) -> None:
+    """Verify admin token for management endpoints.
+
+    Accepts: Authorization: Bearer <token> or ?token= query param.
+    Skipped if ADMIN_TOKEN is not configured.
+    """
+    if not settings.admin_token:
+        return  # no token configured = skip auth
+    token = authorization.removeprefix("Bearer ").strip()
+    if token == settings.admin_token:
+        return
+    raise HTTPException(status_code=401, detail="unauthorized")
+
+
 # ── Scheduler ────────────────────────────────────────────────────────
 
 scheduler = AsyncIOScheduler()
@@ -39,6 +55,13 @@ async def scheduled_daily_analysis():
         unmatched = await get_unmatched_conversations()
         report = generate_daily_report(summary, unmatched=unmatched)
         logger.info("Daily report:\n%s", report)
+
+        # Write report to Feishu CEO日报 Base
+        try:
+            from app.writers.report_writer import write_report_to_feishu
+            await write_report_to_feishu(report, summary)
+        except Exception as e:
+            logger.warning("CEO日报 write failed (non-blocking): %s", e)
     except Exception:
         logger.exception("Daily analysis failed")
 
@@ -127,7 +150,7 @@ async def health():
         return JSONResponse({"status": "error", "db": "failed"}, status_code=503)
 
 
-@app.post("/api/v1/analyze/trigger")
+@app.post("/api/v1/analyze/trigger", dependencies=[Depends(verify_admin)])
 async def manual_trigger():
     """Manually trigger the daily analysis pipeline (for testing)."""
     summary = await run_daily_pipeline()
@@ -271,18 +294,10 @@ async def list_ai_customers():
     for c in convs:
         # Inline relationship_stage calc (avoids N+1 DB queries)
         total = c.get("total_messages") or 0
-        from app.store.conversations import _parse_first_message_ts
+        from app.store.conversations import _parse_first_message_ts, calc_relationship_stage
         first_ts = _parse_first_message_ts(c.get("first_message_at"))
         first_seen_days = max(0, int((time.time() - first_ts) / 86400)) if first_ts else 0
-
-        if total <= 2:
-            rel_stage = "new"
-        elif total <= 10 or first_seen_days <= 3:
-            rel_stage = "early"
-        elif total <= 50 or first_seen_days <= 30:
-            rel_stage = "developing"
-        else:
-            rel_stage = "established"
+        rel_stage = calc_relationship_stage(total, first_seen_days)
 
         phone_key = _digits(c["phone"])
         hs = hs_by_phone.get(phone_key)
@@ -339,7 +354,7 @@ async def list_ai_customers():
     return {"count": len(customers), "customers": customers}
 
 
-@app.post("/api/v1/ai/disable/{phone}")
+@app.post("/api/v1/ai/disable/{phone}", dependencies=[Depends(verify_admin)])
 async def disable_ai(phone: str):
     """Disable AI auto-reply for a customer (big/VIP, handled manually)."""
     from app.store.conversations import set_ai_disabled
@@ -349,7 +364,7 @@ async def disable_ai(phone: str):
     return {"status": "ok", "phone": phone, "ai_disabled": True}
 
 
-@app.post("/api/v1/ai/enable/{phone}")
+@app.post("/api/v1/ai/enable/{phone}", dependencies=[Depends(verify_admin)])
 async def enable_ai(phone: str):
     """Re-enable AI auto-reply for a customer."""
     from app.store.conversations import set_ai_disabled
@@ -370,7 +385,7 @@ async def list_ai_disabled():
 _VALID_SIZES = {"big", "medium", "small", ""}
 
 
-@app.post("/api/v1/ai/customer-size/{phone}")
+@app.post("/api/v1/ai/customer-size/{phone}", dependencies=[Depends(verify_admin)])
 async def set_customer_size_api(phone: str, payload: dict):
     """Set customer size classification.
 
@@ -386,7 +401,7 @@ async def set_customer_size_api(phone: str, payload: dict):
     return {"status": "ok", "phone": phone, "customer_size": size}
 
 
-@app.post("/api/v1/ai/tags/{phone}")
+@app.post("/api/v1/ai/tags/{phone}", dependencies=[Depends(verify_admin)])
 async def update_tags(phone: str, payload: dict):
     """Update customer_tags on the HubSpot contact matching this phone.
 
@@ -432,7 +447,7 @@ async def refresh_cache():
     return {"status": "ok", "count": len(contacts), "seconds": elapsed}
 
 
-@app.post("/api/v1/send")
+@app.post("/api/v1/send", dependencies=[Depends(verify_admin)])
 async def send_message(payload: dict):
     """Send a WhatsApp message and record it in the database.
 

@@ -6,7 +6,6 @@ from datetime import datetime, timedelta, timezone
 from itertools import groupby
 from operator import itemgetter
 from pathlib import Path
-
 from app.store.messages import get_unprocessed_messages, mark_processed
 from app.store.conversations import (
     get_all_conversations,
@@ -30,6 +29,28 @@ from app.writers.hubspot_writer import (
 )
 
 logger = logging.getLogger(__name__)
+
+# ── Analysis cache (avoid re-calling LLM for unprocessed messages) ────
+_ANALYSIS_CACHE_PATH = Path("data/analysis_cache.json")
+
+
+def _load_analysis_cache() -> dict[str, dict]:
+    """Load cached analysis results keyed by phone."""
+    if _ANALYSIS_CACHE_PATH.exists():
+        try:
+            return json.loads(_ANALYSIS_CACHE_PATH.read_text())
+        except Exception:
+            pass
+    return {}
+
+
+def _save_analysis_cache(cache: dict[str, dict]) -> None:
+    """Save analysis cache to disk."""
+    try:
+        _ANALYSIS_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _ANALYSIS_CACHE_PATH.write_text(json.dumps(cache, ensure_ascii=False))
+    except Exception as e:
+        logger.warning("Failed to save analysis cache: %s", e)
 
 
 async def _auto_create_unmatched(
@@ -178,6 +199,9 @@ async def run_daily_pipeline() -> dict:
     errors: list[str] = []
     results: list[dict] = []
 
+    # Load analysis cache (reuse if LLM succeeded but CRM writes failed last run)
+    analysis_cache = _load_analysis_cache()
+
     for phone, msgs in grouped.items():
         conv = conversations_db.get(phone, {})
         display_name = conv.get("display_name", "") or msgs[0].get("display_name", "")
@@ -185,18 +209,12 @@ async def run_daily_pipeline() -> dict:
 
         logger.info("Analyzing %s (%s) — %d messages", customer_name, phone, len(msgs))
 
-        # Collect image file paths for this customer
-        image_paths = [
-            m["media_path"] for m in msgs
-            if m.get("media_path")
-            and m.get("msg_type") == "image"
-            and Path(m["media_path"]).exists()
-        ]
-        if image_paths:
-            logger.info("Found %d images for %s", len(image_paths), customer_name)
-
-        # Analyze
-        analysis = await analyze_conversation(msgs, customer_name, phone)
+        # Try cached analysis first (from previous run where CRM writes failed)
+        analysis = analysis_cache.pop(phone, None)
+        if analysis:
+            logger.info("Using cached analysis for %s (skipping LLM call)", customer_name)
+        else:
+            analysis = await analyze_conversation(msgs, customer_name, phone)
         if not analysis:
             errors.append(f"Analysis failed for {customer_name} ({phone})")
             continue
@@ -361,7 +379,12 @@ async def run_daily_pipeline() -> dict:
             msg_ids = [m["id"] for m in msgs]
             await mark_processed(msg_ids)
         else:
-            logger.warning("Skipping mark_processed for %s — no CRM write succeeded", customer_name)
+            # Cache analysis to avoid re-calling LLM next run
+            analysis_cache[phone] = analysis
+            logger.warning("Skipping mark_processed for %s — no CRM write succeeded (analysis cached)", customer_name)
+
+    # Persist remaining cached analyses (only for phones that failed)
+    _save_analysis_cache(analysis_cache)
 
     # Step 6: Auto-create customers for remaining unmatched conversations
     # (backlog — those with no unprocessed messages left)
