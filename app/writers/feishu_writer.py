@@ -17,27 +17,50 @@ logger = logging.getLogger(__name__)
 
 BASE_URL = "https://open.feishu.cn/open-apis"
 
+# ── Shared HTTP client (TCP connection reuse) ─────────────────────────
+_http: httpx.AsyncClient | None = None
+
+
+def _get_http() -> httpx.AsyncClient:
+    """Get or create shared httpx client for TCP connection reuse."""
+    global _http
+    if _http is None or _http.is_closed:
+        _http = httpx.AsyncClient(timeout=15)
+    return _http
+
+
 # Token cache
 _token: str = ""
 _token_expires_at: float = 0
+_token_lock = asyncio.Lock()
 
 
 # ── Auth ─────────────────────────────────────────────────────────────
 
 async def _get_tenant_token() -> str:
-    """Get or refresh the tenant_access_token."""
+    """Get or refresh the tenant_access_token.
+
+    Uses asyncio.Lock to prevent concurrent refreshes from parallel webhooks.
+    """
     global _token, _token_expires_at
 
+    # Fast path: token still valid (no lock needed)
     if _token and time.time() < _token_expires_at - 60:
         return _token
 
-    async with httpx.AsyncClient(timeout=10) as client:
+    async with _token_lock:
+        # Double-check after acquiring lock
+        if _token and time.time() < _token_expires_at - 60:
+            return _token
+
+        client = _get_http()
         resp = await client.post(
             f"{BASE_URL}/auth/v3/tenant_access_token/internal",
             json={
                 "app_id": settings.feishu_app_id,
                 "app_secret": settings.feishu_app_secret,
             },
+            timeout=10,
         )
         data = resp.json()
         if data.get("code") != 0:
@@ -80,9 +103,9 @@ async def _search_records(
         "automatic_fields": True,
     }
 
-    async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.post(url, json=payload, headers=await _headers())
-        data = resp.json()
+    client = _get_http()
+    resp = await client.post(url, json=payload, headers=await _headers())
+    data = resp.json()
 
     if data.get("code") != 0:
         logger.error("Feishu search error: %s", data.get("msg"))
@@ -102,13 +125,13 @@ async def _create_record(
     app_token = app_token or settings.feishu_app_token
     url = f"{BASE_URL}/bitable/v1/apps/{app_token}/tables/{table_id}/records"
 
-    async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.post(
-            url,
-            json={"fields": fields},
-            headers=await _headers(),
-        )
-        data = resp.json()
+    client = _get_http()
+    resp = await client.post(
+        url,
+        json={"fields": fields},
+        headers=await _headers(),
+    )
+    data = resp.json()
 
     if data.get("code") != 0:
         logger.error("Feishu create error in %s: %s", table_id, data.get("msg"))
@@ -130,13 +153,13 @@ async def _update_record(
     app_token = app_token or settings.feishu_app_token
     url = f"{BASE_URL}/bitable/v1/apps/{app_token}/tables/{table_id}/records/{record_id}"
 
-    async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.put(
-            url,
-            json={"fields": fields},
-            headers=await _headers(),
-        )
-        data = resp.json()
+    client = _get_http()
+    resp = await client.put(
+        url,
+        json={"fields": fields},
+        headers=await _headers(),
+    )
+    data = resp.json()
 
     if data.get("code") != 0:
         logger.error("Feishu update error in %s/%s: %s", table_id, record_id, data.get("msg"))

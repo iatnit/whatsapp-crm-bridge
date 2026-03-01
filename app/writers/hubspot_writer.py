@@ -17,6 +17,17 @@ logger = logging.getLogger(__name__)
 
 BASE_URL = "https://api.hubapi.com"
 
+# ── Shared HTTP client (TCP connection reuse) ─────────────────────────
+_http: httpx.AsyncClient | None = None
+
+
+def _get_http() -> httpx.AsyncClient:
+    """Get or create shared httpx client for TCP connection reuse."""
+    global _http
+    if _http is None or _http.is_closed:
+        _http = httpx.AsyncClient(timeout=15)
+    return _http
+
 
 # ── Auth ─────────────────────────────────────────────────────────────
 
@@ -92,8 +103,8 @@ async def search_contact_by_phone(phone: str) -> str | None:
         "limit": 1,
     }
 
-    async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.post(url, json=payload, headers=_headers())
+    client = _get_http()
+    resp = await client.post(url, json=payload, headers=_headers())
 
     if resp.status_code != 200:
         logger.error("HubSpot contact search failed [%d]: %s", resp.status_code, resp.text[:200])
@@ -149,8 +160,8 @@ async def create_contact(
 
     url = f"{BASE_URL}/crm/v3/objects/contacts"
 
-    async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.post(url, json={"properties": properties}, headers=_headers())
+    client = _get_http()
+    resp = await client.post(url, json={"properties": properties}, headers=_headers())
 
     if resp.status_code not in (200, 201):
         logger.error("HubSpot create contact failed [%d]: %s", resp.status_code, resp.text[:200])
@@ -190,8 +201,8 @@ async def update_contact(
 
     url = f"{BASE_URL}/crm/v3/objects/contacts/{contact_id}"
 
-    async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.patch(url, json={"properties": properties}, headers=_headers())
+    client = _get_http()
+    resp = await client.patch(url, json={"properties": properties}, headers=_headers())
 
     if resp.status_code != 200:
         logger.error("HubSpot update contact %s failed [%d]: %s", contact_id, resp.status_code, resp.text[:200])
@@ -459,8 +470,8 @@ async def create_note(
         ],
     }
 
-    async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.post(url, json=payload, headers=_headers())
+    client = _get_http()
+    resp = await client.post(url, json=payload, headers=_headers())
 
     if resp.status_code not in (200, 201):
         logger.error("HubSpot create note failed [%d]: %s", resp.status_code, resp.text[:200])
@@ -537,8 +548,8 @@ async def create_deal(
         ],
     }
 
-    async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.post(url, json=payload, headers=_headers())
+    client = _get_http()
+    resp = await client.post(url, json=payload, headers=_headers())
 
     if resp.status_code not in (200, 201):
         logger.error("HubSpot create deal failed [%d]: %s", resp.status_code, resp.text[:200])
