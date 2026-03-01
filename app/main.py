@@ -1,6 +1,8 @@
 """FastAPI application entry point with APScheduler for daily analysis."""
 
 import logging
+import re
+import time
 from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -163,6 +165,29 @@ async def sync_check():
 
 _ai_manager_html: str | None = None
 
+# HubSpot contact cache (TTL 300s)
+_hubspot_cache: list[dict] | None = None
+_hubspot_cache_ts: float = 0
+_HUBSPOT_CACHE_TTL = 300
+
+_VALID_TAGS = {"hot_lead", "vip", "repeat_buyer", "first_timer", "price_shopper", "risky", "agent_potential"}
+
+
+def _digits(phone: str) -> str:
+    """Strip all non-digit chars for phone matching."""
+    return re.sub(r"\D", "", phone or "")
+
+
+async def _get_hubspot_contacts() -> list[dict]:
+    """Return cached HubSpot contacts, refreshing if stale."""
+    global _hubspot_cache, _hubspot_cache_ts
+    if _hubspot_cache is not None and (time.time() - _hubspot_cache_ts) < _HUBSPOT_CACHE_TTL:
+        return _hubspot_cache
+    from app.writers.hubspot_writer import list_all_contacts
+    _hubspot_cache = await list_all_contacts()
+    _hubspot_cache_ts = time.time()
+    return _hubspot_cache
+
 
 @app.get("/ai-manager", response_class=HTMLResponse)
 async def ai_manager_page():
@@ -177,14 +202,35 @@ async def ai_manager_page():
 
 @app.get("/api/v1/ai/customers")
 async def list_ai_customers():
-    """Return all customers with AI-related fields for the manager UI."""
+    """Return merged local + HubSpot customers for the manager UI."""
     from app.store.conversations import get_all_conversations, get_customer_context
 
+    # 1) Local conversations
     convs = await get_all_conversations()
-    customers = []
+
+    # 2) HubSpot contacts
+    hs_contacts = await _get_hubspot_contacts()
+
+    # Index HubSpot by digits-only phone
+    hs_by_phone: dict[str, dict] = {}
+    for h in hs_contacts:
+        for field in ("phone", "whatsapp_number"):
+            key = _digits(h.get(field, ""))
+            if key and len(key) >= 7:
+                hs_by_phone[key] = h
+
+    seen_hs_keys: set[str] = set()
+    customers: list[dict] = []
+
+    # 3) Build merged list: local conversations enriched with HubSpot data
     for c in convs:
         ctx = await get_customer_context(c["phone"])
-        customers.append({
+        phone_key = _digits(c["phone"])
+        hs = hs_by_phone.get(phone_key)
+        if hs:
+            seen_hs_keys.add(phone_key)
+
+        entry = {
             "phone": c["phone"],
             "display_name": c.get("display_name", ""),
             "customer_name": c.get("customer_name", ""),
@@ -192,7 +238,43 @@ async def list_ai_customers():
             "total_messages": c.get("total_messages", 0),
             "ai_disabled": c.get("ai_disabled", 0),
             "relationship_stage": ctx["relationship_stage"],
+            "source": "both" if hs else "local",
+            "hubspot_id": hs["id"] if hs else None,
+            "customer_stage": (hs or {}).get("customer_stage", ""),
+            "product_interest": (hs or {}).get("product_interest", ""),
+            "customer_tags": (hs or {}).get("customer_tags", ""),
+            "customer_type": (hs or {}).get("customer_type", ""),
+            "industry": (hs or {}).get("industry", ""),
+            "customer_tier": (hs or {}).get("customer_tier", ""),
+        }
+        customers.append(entry)
+
+    # 4) HubSpot-only contacts (not in local)
+    for h in hs_contacts:
+        phone_key = _digits(h.get("phone", "") or h.get("whatsapp_number", ""))
+        if not phone_key or phone_key in seen_hs_keys:
+            continue
+        seen_hs_keys.add(phone_key)
+        name_parts = [h.get("firstname", ""), h.get("lastname", "")]
+        display = " ".join(p for p in name_parts if p).strip()
+        customers.append({
+            "phone": h.get("phone", "") or h.get("whatsapp_number", "") or "",
+            "display_name": display,
+            "customer_name": display,
+            "match_status": "hubspot_only",
+            "total_messages": 0,
+            "ai_disabled": 0,
+            "relationship_stage": "",
+            "source": "hubspot",
+            "hubspot_id": h["id"],
+            "customer_stage": h.get("customer_stage", ""),
+            "product_interest": h.get("product_interest", ""),
+            "customer_tags": h.get("customer_tags", ""),
+            "customer_type": h.get("customer_type", ""),
+            "industry": h.get("industry", ""),
+            "customer_tier": h.get("customer_tier", ""),
         })
+
     return {"count": len(customers), "customers": customers}
 
 
@@ -222,6 +304,44 @@ async def list_ai_disabled():
     from app.store.conversations import get_ai_disabled_list
     customers = await get_ai_disabled_list()
     return {"count": len(customers), "customers": customers}
+
+
+@app.post("/api/v1/ai/tags/{phone}")
+async def update_tags(phone: str, payload: dict):
+    """Update customer_tags on the HubSpot contact matching this phone.
+
+    Body: {"tags": "hot_lead;vip"}
+    """
+    global _hubspot_cache
+    from app.writers.hubspot_writer import search_contact_by_phone, update_customer_tags
+
+    tags_str = payload.get("tags", "")
+    # Validate each tag
+    if tags_str:
+        for tag in tags_str.split(";"):
+            tag = tag.strip()
+            if tag and tag not in _VALID_TAGS:
+                return JSONResponse({"error": f"Invalid tag: {tag}"}, status_code=400)
+
+    contact_id = await search_contact_by_phone(phone)
+    if not contact_id:
+        return JSONResponse({"error": f"HubSpot contact not found for {phone}"}, status_code=404)
+
+    ok = await update_customer_tags(contact_id, tags_str)
+    if not ok:
+        return JSONResponse({"error": "HubSpot update failed"}, status_code=502)
+
+    # Invalidate cache so next list reflects the change
+    _hubspot_cache = None
+    return {"status": "ok", "phone": phone, "tags": tags_str}
+
+
+@app.post("/api/v1/ai/refresh")
+async def refresh_cache():
+    """Force-clear the HubSpot contact cache."""
+    global _hubspot_cache
+    _hubspot_cache = None
+    return {"status": "ok", "message": "Cache cleared"}
 
 
 @app.post("/api/v1/send")

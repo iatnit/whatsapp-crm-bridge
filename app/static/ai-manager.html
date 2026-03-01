@@ -7,9 +7,11 @@
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f0f2f5; color: #111b21; }
-.header { background: #008069; color: #fff; padding: 16px 20px; position: sticky; top: 0; z-index: 10; }
-.header h1 { font-size: 20px; font-weight: 600; }
-.header p { font-size: 12px; opacity: .8; margin-top: 2px; }
+.header { background: #008069; color: #fff; padding: 16px 20px; position: sticky; top: 0; z-index: 10; display: flex; justify-content: space-between; align-items: center; }
+.header-left h1 { font-size: 20px; font-weight: 600; }
+.header-left p { font-size: 12px; opacity: .8; margin-top: 2px; }
+.refresh-btn { background: rgba(255,255,255,.2); border: 1px solid rgba(255,255,255,.4); color: #fff; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+.refresh-btn:hover { background: rgba(255,255,255,.3); }
 .stats { display: flex; gap: 12px; padding: 12px 20px; background: #fff; border-bottom: 1px solid #e0e0e0; flex-wrap: wrap; }
 .stat { padding: 8px 16px; border-radius: 8px; background: #f0f2f5; font-size: 14px; white-space: nowrap; }
 .stat b { color: #008069; }
@@ -18,17 +20,41 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .controls input:focus { border-color: #008069; }
 .controls select { padding: 10px 14px; border: 1px solid #d1d7db; border-radius: 8px; font-size: 14px; background: #fff; outline: none; cursor: pointer; }
 .list { padding: 12px 20px; display: grid; gap: 10px; max-width: 900px; margin: 0 auto; }
-.card { background: #fff; border-radius: 10px; padding: 14px 16px; display: flex; align-items: center; gap: 14px; box-shadow: 0 1px 2px rgba(0,0,0,.08); transition: box-shadow .15s; }
+.card { background: #fff; border-radius: 10px; padding: 14px 16px; display: flex; align-items: flex-start; gap: 14px; box-shadow: 0 1px 2px rgba(0,0,0,.08); transition: box-shadow .15s; }
 .card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.12); }
-.avatar { width: 44px; height: 44px; border-radius: 50%; background: #dfe5e7; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 600; color: #667781; flex-shrink: 0; }
+.avatar { width: 44px; height: 44px; border-radius: 50%; background: #dfe5e7; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 600; color: #667781; flex-shrink: 0; margin-top: 2px; }
 .info { flex: 1; min-width: 0; }
+.info .name-row { display: flex; align-items: center; gap: 8px; }
 .info .name { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .info .phone { font-size: 12px; color: #667781; margin-top: 1px; }
 .tags { display: flex; gap: 4px; margin-top: 6px; flex-wrap: wrap; }
 .tag { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #e7f7ef; color: #008069; }
 .tag.warn { background: #fff3cd; color: #856404; }
 .tag.muted { background: #f0f2f5; color: #667781; }
-.toggle-wrap { flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+/* Source badges */
+.source-badge { font-size: 10px; padding: 2px 7px; border-radius: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: .3px; flex-shrink: 0; }
+.source-badge.both { background: #dcfce7; color: #166534; }
+.source-badge.hubspot { background: #dbeafe; color: #1e40af; }
+.source-badge.local { background: #ffedd5; color: #9a3412; }
+/* HubSpot property chips */
+.hs-props { display: flex; gap: 4px; margin-top: 5px; flex-wrap: wrap; }
+.hs-chip { font-size: 10px; padding: 2px 7px; border-radius: 4px; font-weight: 500; }
+.hs-chip.stage { background: #ede9fe; color: #5b21b6; }
+.hs-chip.tier { background: #fce7f3; color: #9d174d; }
+.hs-chip.type { background: #e0f2fe; color: #075985; }
+.hs-chip.product { background: #fef3c7; color: #92400e; }
+/* Editable tags row */
+.ctags-row { display: flex; gap: 4px; margin-top: 5px; flex-wrap: wrap; align-items: center; }
+.ctag { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #fee2e2; color: #991b1b; display: inline-flex; align-items: center; gap: 3px; }
+.ctag .x { cursor: pointer; font-weight: 700; font-size: 13px; line-height: 1; opacity: .6; }
+.ctag .x:hover { opacity: 1; }
+.add-tag-btn { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #f0f2f5; color: #667781; cursor: pointer; border: 1px dashed #d1d7db; position: relative; }
+.add-tag-btn:hover { background: #e0e0e0; }
+/* Tag dropdown */
+.tag-dropdown { position: absolute; top: 100%; left: 0; background: #fff; border: 1px solid #d1d7db; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,.15); z-index: 20; min-width: 150px; margin-top: 4px; }
+.tag-dropdown div { padding: 8px 12px; font-size: 12px; cursor: pointer; }
+.tag-dropdown div:hover { background: #f0f2f5; }
+.toggle-wrap { flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; margin-top: 2px; }
 .toggle-label { font-size: 10px; color: #667781; }
 .toggle { position: relative; width: 44px; height: 24px; cursor: pointer; }
 .toggle input { opacity: 0; width: 0; height: 0; }
@@ -52,14 +78,20 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 <body>
 
 <div class="header">
-  <h1>AI Manager</h1>
-  <p>Manage AI auto-reply for WhatsApp customers</p>
+  <div class="header-left">
+    <h1>AI Manager</h1>
+    <p>Manage AI auto-reply for WhatsApp customers</p>
+  </div>
+  <button class="refresh-btn" onclick="refreshData()">Refresh</button>
 </div>
 
 <div class="stats" id="stats">
   <div class="stat">Total: <b id="s-total">-</b></div>
   <div class="stat">AI On: <b id="s-on">-</b></div>
   <div class="stat">AI Off: <b id="s-off">-</b></div>
+  <div class="stat">Both: <b id="s-both">-</b></div>
+  <div class="stat">HubSpot: <b id="s-hs">-</b></div>
+  <div class="stat">Local: <b id="s-local">-</b></div>
 </div>
 
 <div class="controls">
@@ -70,6 +102,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
     <option value="ai-off">AI Off</option>
     <option value="matched">Matched</option>
     <option value="unmatched">Unmatched</option>
+    <option value="hubspot-only">HubSpot Only</option>
+    <option value="local-only">Local Only</option>
+    <option value="has-tags">Has Tags</option>
   </select>
 </div>
 
@@ -78,7 +113,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 </div>
 
 <script>
+const TAG_OPTIONS = ['hot_lead', 'vip', 'repeat_buyer', 'first_timer', 'price_shopper', 'risky', 'agent_potential'];
+const TAG_LABELS = { hot_lead: 'Hot Lead', vip: 'VIP', repeat_buyer: 'Repeat Buyer', first_timer: 'First Timer', price_shopper: 'Price Shopper', risky: 'Risky', agent_potential: 'Agent Potential' };
+
 let customers = [];
+let openDropdown = null; // phone of currently open dropdown
 
 async function loadCustomers() {
   try {
@@ -94,11 +133,25 @@ async function loadCustomers() {
   }
 }
 
+async function refreshData() {
+  document.getElementById('list').innerHTML = '<div class="loading">Refreshing...</div>';
+  try {
+    await fetch('/api/v1/ai/refresh', { method: 'POST' });
+  } catch (e) { /* ignore */ }
+  await loadCustomers();
+}
+
 function updateStats() {
   const off = customers.filter(c => c.ai_disabled).length;
+  const both = customers.filter(c => c.source === 'both').length;
+  const hs = customers.filter(c => c.source === 'hubspot').length;
+  const local = customers.filter(c => c.source === 'local').length;
   document.getElementById('s-total').textContent = customers.length;
   document.getElementById('s-on').textContent = customers.length - off;
   document.getElementById('s-off').textContent = off;
+  document.getElementById('s-both').textContent = both;
+  document.getElementById('s-hs').textContent = hs;
+  document.getElementById('s-local').textContent = local;
 }
 
 function getFiltered() {
@@ -106,13 +159,16 @@ function getFiltered() {
   const f = document.getElementById('filter').value;
   return customers.filter(c => {
     if (q) {
-      const hay = (c.display_name + ' ' + c.customer_name + ' ' + c.phone).toLowerCase();
+      const hay = (c.display_name + ' ' + c.customer_name + ' ' + c.phone + ' ' + (c.customer_tags || '')).toLowerCase();
       if (!hay.includes(q)) return false;
     }
     if (f === 'ai-on' && c.ai_disabled) return false;
     if (f === 'ai-off' && !c.ai_disabled) return false;
     if (f === 'matched' && c.match_status !== 'matched') return false;
     if (f === 'unmatched' && c.match_status !== 'unmatched') return false;
+    if (f === 'hubspot-only' && c.source !== 'hubspot') return false;
+    if (f === 'local-only' && c.source !== 'local') return false;
+    if (f === 'has-tags' && !c.customer_tags) return false;
     return true;
   });
 }
@@ -127,6 +183,33 @@ function stageLabel(stage) {
   return map[stage] || stage || 'New';
 }
 
+function sourceBadge(source) {
+  if (source === 'both') return '<span class="source-badge both">Both</span>';
+  if (source === 'hubspot') return '<span class="source-badge hubspot">HS Only</span>';
+  return '<span class="source-badge local">Local</span>';
+}
+
+function hsPropsHtml(c) {
+  let chips = '';
+  if (c.customer_stage) chips += '<span class="hs-chip stage">' + esc(c.customer_stage) + '</span>';
+  if (c.customer_tier) chips += '<span class="hs-chip tier">Tier ' + esc(c.customer_tier) + '</span>';
+  if (c.customer_type) chips += '<span class="hs-chip type">' + esc(c.customer_type) + '</span>';
+  if (c.product_interest) chips += '<span class="hs-chip product">' + esc(c.product_interest) + '</span>';
+  return chips ? '<div class="hs-props">' + chips + '</div>' : '';
+}
+
+function ctagsHtml(c) {
+  const tags = (c.customer_tags || '').split(';').filter(t => t.trim());
+  let html = '<div class="ctags-row">';
+  tags.forEach(t => {
+    html += '<span class="ctag">' + esc(TAG_LABELS[t] || t) +
+      ' <span class="x" onclick="removeTag(\'' + esc(c.phone) + '\', \'' + esc(t) + '\')">&times;</span></span>';
+  });
+  html += '<span class="add-tag-btn" onclick="showTagDropdown(event, \'' + esc(c.phone) + '\')">+ Tag</span>';
+  html += '</div>';
+  return html;
+}
+
 function render() {
   const items = getFiltered();
   const el = document.getElementById('list');
@@ -137,26 +220,40 @@ function render() {
   el.innerHTML = items.map(c => {
     const name = c.customer_name || c.display_name || c.phone;
     const aiOn = !c.ai_disabled;
+    const isHsOnly = c.source === 'hubspot';
     const matchTag = c.match_status === 'matched'
       ? '<span class="tag">Matched</span>'
-      : '<span class="tag warn">Unmatched</span>';
-    const stageTag = '<span class="tag muted">' + stageLabel(c.relationship_stage) + '</span>';
-    const msgTag = '<span class="tag muted">' + (c.total_messages || 0) + ' msgs</span>';
-    return '<div class="card">' +
-      '<div class="avatar">' + initials(c) + '</div>' +
-      '<div class="info">' +
-        '<div class="name">' + esc(name) + '</div>' +
-        '<div class="phone">+' + esc(c.phone) + '</div>' +
-        '<div class="tags">' + matchTag + stageTag + msgTag + '</div>' +
-      '</div>' +
-      '<div class="toggle-wrap">' +
+      : c.match_status === 'hubspot_only'
+        ? ''
+        : '<span class="tag warn">Unmatched</span>';
+    const stageTag = c.relationship_stage ? '<span class="tag muted">' + stageLabel(c.relationship_stage) + '</span>' : '';
+    const msgTag = c.total_messages ? '<span class="tag muted">' + c.total_messages + ' msgs</span>' : '';
+
+    let toggleHtml = '';
+    if (!isHsOnly) {
+      toggleHtml = '<div class="toggle-wrap">' +
         '<label class="toggle">' +
           '<input type="checkbox"' + (aiOn ? ' checked' : '') +
           ' onchange="toggleAI(\'' + c.phone + '\', this)">' +
           '<span class="slider"></span>' +
         '</label>' +
         '<span class="toggle-label">' + (aiOn ? 'AI On' : 'AI Off') + '</span>' +
+      '</div>';
+    }
+
+    return '<div class="card">' +
+      '<div class="avatar">' + initials(c) + '</div>' +
+      '<div class="info">' +
+        '<div class="name-row">' +
+          '<div class="name">' + esc(name) + '</div>' +
+          sourceBadge(c.source) +
+        '</div>' +
+        '<div class="phone">+' + esc(c.phone) + '</div>' +
+        '<div class="tags">' + matchTag + stageTag + msgTag + '</div>' +
+        hsPropsHtml(c) +
+        ctagsHtml(c) +
       '</div>' +
+      toggleHtml +
     '</div>';
   }).join('');
 }
@@ -166,6 +263,81 @@ function esc(s) {
   d.textContent = s || '';
   return d.innerHTML;
 }
+
+// ── Tag editing ──────────────────────────────────────────────────
+
+function showTagDropdown(event, phone) {
+  event.stopPropagation();
+  // Close any existing dropdown
+  closeTagDropdown();
+
+  const c = customers.find(x => x.phone === phone);
+  const existing = (c && c.customer_tags || '').split(';').filter(t => t.trim());
+  const available = TAG_OPTIONS.filter(t => !existing.includes(t));
+  if (!available.length) return;
+
+  const btn = event.currentTarget;
+  const dd = document.createElement('div');
+  dd.className = 'tag-dropdown';
+  dd.id = 'tag-dropdown-active';
+  available.forEach(t => {
+    const item = document.createElement('div');
+    item.textContent = TAG_LABELS[t] || t;
+    item.onclick = (e) => { e.stopPropagation(); addTag(phone, t); };
+    dd.appendChild(item);
+  });
+  btn.style.position = 'relative';
+  btn.appendChild(dd);
+  openDropdown = phone;
+}
+
+function closeTagDropdown() {
+  const dd = document.getElementById('tag-dropdown-active');
+  if (dd) dd.remove();
+  openDropdown = null;
+}
+
+document.addEventListener('click', closeTagDropdown);
+
+async function saveTags(phone, tagsArray) {
+  const tagsStr = tagsArray.join(';');
+  try {
+    const res = await fetch('/api/v1/ai/tags/' + encodeURIComponent(phone), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tags: tagsStr }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || res.statusText);
+    }
+    // Update local state on success
+    const c = customers.find(x => x.phone === phone);
+    if (c) c.customer_tags = tagsStr;
+    render();
+  } catch (e) {
+    alert('Tag update failed: ' + e.message);
+  }
+}
+
+function addTag(phone, tag) {
+  closeTagDropdown();
+  const c = customers.find(x => x.phone === phone);
+  if (!c) return;
+  const existing = (c.customer_tags || '').split(';').filter(t => t.trim());
+  if (existing.includes(tag)) return;
+  existing.push(tag);
+  saveTags(phone, existing);
+}
+
+function removeTag(phone, tag) {
+  const c = customers.find(x => x.phone === phone);
+  if (!c) return;
+  const existing = (c.customer_tags || '').split(';').filter(t => t.trim() && t !== tag);
+  saveTags(phone, existing);
+}
+
+// ── AI toggle ────────────────────────────────────────────────────
 
 async function toggleAI(phone, el) {
   const enable = el.checked;

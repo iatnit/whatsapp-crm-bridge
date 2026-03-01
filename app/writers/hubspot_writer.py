@@ -579,3 +579,51 @@ async def create_deal(
     deal_id = resp.json().get("id")
     logger.info("HubSpot created deal %s: %s", deal_id, deal_name)
     return deal_id
+
+
+# ── Contact listing & tag update ─────────────────────────────────────
+
+_LIST_PROPERTIES = [
+    "phone", "firstname", "lastname", "country",
+    "customer_stage", "product_interest", "customer_tags",
+    "customer_type", "industry", "customer_tier",
+    "whatsapp_number", "market_region", "comm_language",
+]
+
+
+async def list_all_contacts() -> list[dict]:
+    """Paginate all HubSpot contacts with LOCA properties.
+
+    Returns flat list of dicts with 'id' + property values.
+    """
+    client = _get_http()
+    url = f"{BASE_URL}/crm/v3/objects/contacts"
+    params: dict = {
+        "limit": 100,
+        "properties": ",".join(_LIST_PROPERTIES),
+    }
+    all_contacts: list[dict] = []
+
+    while True:
+        resp = await client.get(url, params=params, headers=_headers())
+        if resp.status_code != 200:
+            logger.error("HubSpot list contacts failed [%d]: %s", resp.status_code, resp.text[:200])
+            break
+        data = resp.json()
+        for r in data.get("results", []):
+            entry = {"id": r["id"]}
+            entry.update(r.get("properties", {}))
+            all_contacts.append(entry)
+        paging = data.get("paging", {}).get("next")
+        if paging:
+            params["after"] = paging["after"]
+        else:
+            break
+
+    logger.info("HubSpot listed %d contacts", len(all_contacts))
+    return all_contacts
+
+
+async def update_customer_tags(contact_id: str, tags: str) -> bool:
+    """Update customer_tags on a HubSpot contact."""
+    return await update_contact(contact_id, extra={"customer_tags": tags})
