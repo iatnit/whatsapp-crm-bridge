@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     feishu_table_customers: str = ""
     feishu_table_followup: str = ""
 
+    # --- Feishu Bot ---
+    feishu_bot_enabled: bool = False
+    feishu_bot_allowed_users: str = ""          # comma-separated open_id list
+    feishu_bot_verification_token: str = ""
+
     # --- HubSpot ---
     hubspot_access_token: str = ""   # Private App access token
     hubspot_enabled: bool = False    # 主开关

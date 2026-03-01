@@ -100,3 +100,105 @@ async def call_gemini(
 
     logger.error("Gemini API exhausted %d retries, last error: %s", max_retries + 1, last_error)
     return None
+
+
+async def call_gemini_with_tools(
+    *,
+    system_prompt: str,
+    user_prompt: str,
+    tools: list[dict],
+    temperature: float = 0.3,
+    max_tokens: int = 2048,
+    timeout: float = 60,
+    max_retries: int = 2,
+) -> dict | None:
+    """Call Gemini with function-calling tools.
+
+    Args:
+        tools: List of tool declarations in Gemini format
+               [{"function_declarations": [...]}]
+
+    Returns:
+        {"type": "function_call", "function_name": str, "arguments": dict}
+        or {"type": "text", "text": str}
+        or None on failure.
+    """
+    url = (
+        f"https://generativelanguage.googleapis.com/v1beta/models/"
+        f"gemini-2.5-flash:generateContent?key={settings.gemini_api_key}"
+    )
+    payload = {
+        "system_instruction": {"parts": [{"text": system_prompt}]},
+        "contents": [{"parts": [{"text": user_prompt}]}],
+        "tools": tools,
+        "generationConfig": {
+            "temperature": temperature,
+            "maxOutputTokens": max_tokens,
+        },
+    }
+
+    last_error = None
+    for attempt in range(max_retries + 1):
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                resp = await client.post(url, json=payload)
+
+            if resp.status_code != 200:
+                if resp.status_code in _RETRYABLE_CODES and attempt < max_retries:
+                    delay = 2 ** (attempt + 1)
+                    logger.warning(
+                        "Gemini tools API %d (attempt %d/%d), retrying in %ds...",
+                        resp.status_code, attempt + 1, max_retries + 1, delay,
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                logger.error("Gemini tools API error %d: %s", resp.status_code, resp.text[:500])
+                return None
+
+            data = resp.json()
+            candidates = data.get("candidates", [])
+            if not candidates:
+                logger.error("Gemini tools: no candidates in response")
+                return None
+
+            parts = candidates[0].get("content", {}).get("parts", [])
+            if not parts:
+                logger.error("Gemini tools: empty parts in response")
+                return None
+
+            # Check for function call first
+            for part in parts:
+                if "functionCall" in part:
+                    fc = part["functionCall"]
+                    return {
+                        "type": "function_call",
+                        "function_name": fc["name"],
+                        "arguments": fc.get("args", {}),
+                    }
+
+            # Fall back to text
+            text = parts[0].get("text", "").strip()
+            if text:
+                return {"type": "text", "text": text}
+
+            logger.error("Gemini tools: no function call or text in response")
+            return None
+
+        except (httpx.TimeoutException, httpx.ConnectError) as e:
+            last_error = e
+            if attempt < max_retries:
+                delay = 2 ** (attempt + 1)
+                logger.warning(
+                    "Gemini tools timeout/connect (attempt %d/%d), retrying in %ds: %s",
+                    attempt + 1, max_retries + 1, delay, e,
+                )
+                await asyncio.sleep(delay)
+                continue
+            logger.error("Gemini tools call failed after %d attempts: %s", max_retries + 1, e)
+            return None
+        except Exception as e:
+            logger.error("Gemini tools call failed: %s", e)
+            return None
+
+    logger.error("Gemini tools exhausted %d retries, last error: %s", max_retries + 1, last_error)
+    return None

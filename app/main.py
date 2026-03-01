@@ -14,6 +14,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from app.config import settings
 from app.store.database import init_db
 from app.webhook.router import router as webhook_router
+from app.feishu_bot.router import router as feishu_bot_router
 from app.analyzer.daily_pipeline import run_daily_pipeline
 from app.writers.report_writer import generate_daily_report
 
@@ -171,6 +172,7 @@ app = FastAPI(
 )
 
 app.include_router(webhook_router)
+app.include_router(feishu_bot_router)
 
 
 # ── Health & manual trigger endpoints ────────────────────────────────
