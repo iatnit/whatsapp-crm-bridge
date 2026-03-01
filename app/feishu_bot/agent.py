@@ -122,6 +122,20 @@ TOOL_DECLARATIONS = [
                     },
                 },
             },
+            {
+                "name": "search_customer_by_name",
+                "description": "按客户名称模糊搜索，返回匹配的客户列表（含手机号、消息数等信息）。支持英文名、公司名等关键词",
+                "parameters": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "name": {
+                            "type": "STRING",
+                            "description": "客户名称关键词，如 Ahmad、Pankaj、Crystal 等",
+                        },
+                    },
+                    "required": ["name"],
+                },
+            },
         ]
     }
 ]
@@ -237,6 +251,31 @@ async def _dispatch(function_name: str, arguments: dict) -> str:
                 pri = a.get("priority", "")
                 action = a.get("today_action", "") or a.get("pending_customer", "")
                 lines.append(f"  • [{pri}] {name}: {action}")
+            return "\n".join(lines)
+
+        elif function_name == "search_customer_by_name":
+            from app.store.conversations import get_all_conversations
+            name = arguments.get("name", "").lower()
+            if not name:
+                return "错误：缺少 name 参数"
+            convs = await get_all_conversations()
+            matches = []
+            for c in convs:
+                cname = (c.get("customer_name") or "").lower()
+                dname = (c.get("display_name") or "").lower()
+                if name in cname or name in dname:
+                    matches.append(c)
+            if not matches:
+                return f"没有找到包含 \"{name}\" 的客户"
+            lines = [f"搜索 \"{name}\" 找到 {len(matches)} 个客户："]
+            for c in matches[:20]:
+                cname = c.get("customer_name") or c.get("display_name") or "?"
+                phone = c["phone"]
+                msgs = c.get("total_messages", 0)
+                ai = "🔇" if c.get("ai_disabled") else ""
+                lines.append(f"  • {cname} ({phone}) - {msgs}条消息 {ai}")
+            if len(matches) > 20:
+                lines.append(f"  ...还有 {len(matches) - 20} 个")
             return "\n".join(lines)
 
         else:
