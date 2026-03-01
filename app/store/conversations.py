@@ -134,12 +134,12 @@ async def set_ai_disabled(phone: str, disabled: bool) -> bool:
         return cursor.rowcount > 0
 
 
-async def set_big_customer(phone: str, is_big: bool) -> bool:
-    """Mark or unmark a phone as big/key customer. Returns True if row existed."""
+async def set_customer_size(phone: str, size: str) -> bool:
+    """Set customer size (big/medium/small or empty). Returns True if row existed."""
     async with get_db() as db:
         cursor = await db.execute(
-            "UPDATE conversations SET is_big_customer = ? WHERE phone = ?",
-            (1 if is_big else 0, phone),
+            "UPDATE conversations SET customer_size = ? WHERE phone = ?",
+            (size, phone),
         )
         await db.commit()
         return cursor.rowcount > 0

@@ -36,6 +36,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .badge.ai-on { background: #dcfce7; color: #166534; }
 .badge.ai-off { background: #f3f4f6; color: #6b7280; }
 .badge.big { background: #fef3c7; color: #92400e; }
+.badge.medium { background: #dbeafe; color: #1e40af; }
+.badge.small { background: #f3f4f6; color: #6b7280; }
+/* Size selector */
+.size-select { font-size: 11px; padding: 2px 4px; border: 1px solid #d1d7db; border-radius: 4px; background: #fff; cursor: pointer; outline: none; color: #111b21; }
 /* Source badges */
 .source-badge { font-size: 10px; padding: 2px 7px; border-radius: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: .3px; flex-shrink: 0; }
 .source-badge.both { background: #dcfce7; color: #166534; }
@@ -70,7 +74,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .toggle input:checked + .slider { background: #25d366; }
 .toggle input:checked + .slider::before { transform: translateX(16px); }
 .toggle input:disabled + .slider { opacity: .5; cursor: wait; }
-.toggle.big-t input:checked + .slider { background: #f59e0b; }
 .empty { text-align: center; padding: 60px 20px; color: #667781; }
 .loading { text-align: center; padding: 60px 20px; color: #667781; }
 .pagination { display: flex; justify-content: center; align-items: center; gap: 12px; padding: 14px 20px; max-width: 900px; margin: 0 auto; }
@@ -102,7 +105,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
   <div class="stat">Total: <b id="s-total">-</b></div>
   <div class="stat">AI On: <b id="s-on">-</b></div>
   <div class="stat">AI Off: <b id="s-off">-</b></div>
-  <div class="stat">Big: <b id="s-big">-</b></div>
+  <div class="stat">B:<b id="s-big">-</b> M:<b id="s-med">-</b> S:<b id="s-sml">-</b></div>
   <div class="stat">Both: <b id="s-both">-</b></div>
   <div class="stat">HubSpot: <b id="s-hs">-</b></div>
   <div class="stat">Local: <b id="s-local">-</b></div>
@@ -121,9 +124,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
     <option value="on">AI On</option>
     <option value="off">AI Off</option>
   </select>
+  <select id="f-size">
+    <option value="all">Size: All</option>
+    <option value="big">Big</option>
+    <option value="medium">Medium</option>
+    <option value="small">Small</option>
+    <option value="none">Unclassified</option>
+  </select>
   <select id="f-type">
-    <option value="all">Type: All</option>
-    <option value="big">Big Only</option>
+    <option value="all">More: All</option>
     <option value="matched">Matched</option>
     <option value="unmatched">Unmatched</option>
     <option value="has-tags">Has Tags</option>
@@ -180,7 +189,9 @@ async function refreshData() {
 
 function updateStats() {
   const off = customers.filter(c => c.ai_disabled).length;
-  const big = customers.filter(c => c.is_big_customer).length;
+  const big = customers.filter(c => c.customer_size === 'big').length;
+  const med = customers.filter(c => c.customer_size === 'medium').length;
+  const sml = customers.filter(c => c.customer_size === 'small').length;
   const both = customers.filter(c => c.source === 'both').length;
   const hs = customers.filter(c => c.source === 'hubspot').length;
   const local = customers.filter(c => c.source === 'local').length;
@@ -188,6 +199,8 @@ function updateStats() {
   document.getElementById('s-on').textContent = customers.length - off;
   document.getElementById('s-off').textContent = off;
   document.getElementById('s-big').textContent = big;
+  document.getElementById('s-med').textContent = med;
+  document.getElementById('s-sml').textContent = sml;
   document.getElementById('s-both').textContent = both;
   document.getElementById('s-hs').textContent = hs;
   document.getElementById('s-local').textContent = local;
@@ -197,20 +210,22 @@ function getFiltered() {
   const q = document.getElementById('search').value.toLowerCase().trim();
   const fSource = document.getElementById('f-source').value;
   const fAi = document.getElementById('f-ai').value;
+  const fSize = document.getElementById('f-size').value;
   const fType = document.getElementById('f-type').value;
   return customers.filter(c => {
-    // Text search
     if (q) {
       const hay = ((c.display_name || '') + ' ' + (c.customer_name || '') + ' ' + (c.phone || '') + ' ' + (c.customer_tags || '')).toLowerCase();
       if (!hay.includes(q)) return false;
     }
-    // Source filter
     if (fSource !== 'all' && c.source !== fSource) return false;
-    // AI filter
     if (fAi === 'on' && c.ai_disabled) return false;
     if (fAi === 'off' && !c.ai_disabled) return false;
-    // Type filter
-    if (fType === 'big' && !c.is_big_customer) return false;
+    // Size filter
+    if (fSize === 'big' && c.customer_size !== 'big') return false;
+    if (fSize === 'medium' && c.customer_size !== 'medium') return false;
+    if (fSize === 'small' && c.customer_size !== 'small') return false;
+    if (fSize === 'none' && c.customer_size) return false;
+    // More filter
     if (fType === 'matched' && c.match_status !== 'matched') return false;
     if (fType === 'unmatched' && c.match_status !== 'unmatched') return false;
     if (fType === 'has-tags' && !c.customer_tags) return false;
@@ -277,14 +292,15 @@ function render() {
   el.innerHTML = items.map(c => {
     const name = c.customer_name || c.display_name || c.phone;
     const aiOn = !c.ai_disabled;
-    const isBig = c.is_big_customer;
+    const size = c.customer_size || '';
     const isHsOnly = c.source === 'hubspot';
 
     // Status badges after name
     const aiBadge = aiOn
       ? '<span class="badge ai-on">AI On</span>'
       : '<span class="badge ai-off">AI Off</span>';
-    const bigBadge = isBig ? '<span class="badge big">Big</span>' : '';
+    const SIZE_BADGE = { big: '<span class="badge big">Big</span>', medium: '<span class="badge medium">Med</span>', small: '<span class="badge small">Small</span>' };
+    const sizeBadge = SIZE_BADGE[size] || '';
 
     const matchTag = c.match_status === 'matched'
       ? '<span class="tag">Matched</span>'
@@ -294,9 +310,13 @@ function render() {
     const stageTag = c.relationship_stage ? '<span class="tag muted">' + stageLabel(c.relationship_stage) + '</span>' : '';
     const msgTag = c.total_messages ? '<span class="tag muted">' + c.total_messages + ' msgs</span>' : '';
 
-    // Right-side toggles (only for local/both contacts)
+    // Right-side controls (only for local/both contacts)
     let togglesHtml = '';
     if (!isHsOnly) {
+      const sizeOpts = ['', 'big', 'medium', 'small'].map(v => {
+        const label = v ? v.charAt(0).toUpperCase() + v.slice(1) : '--';
+        return '<option value="' + v + '"' + (size === v ? ' selected' : '') + '>' + label + '</option>';
+      }).join('');
       togglesHtml = '<div class="toggles">' +
         '<div class="toggle-row">' +
           '<span class="tl">AI</span>' +
@@ -307,12 +327,10 @@ function render() {
           '</label>' +
         '</div>' +
         '<div class="toggle-row">' +
-          '<span class="tl">Big</span>' +
-          '<label class="toggle big-t">' +
-            '<input type="checkbox"' + (isBig ? ' checked' : '') +
-            ' onchange="toggleBig(\'' + c.phone + '\', this)">' +
-            '<span class="slider"></span>' +
-          '</label>' +
+          '<span class="tl">Size</span>' +
+          '<select class="size-select" onchange="setSize(\'' + c.phone + '\', this.value)">' +
+            sizeOpts +
+          '</select>' +
         '</div>' +
       '</div>';
     }
@@ -322,7 +340,7 @@ function render() {
       '<div class="info">' +
         '<div class="name-row">' +
           '<div class="name">' + esc(name) + '</div>' +
-          aiBadge + bigBadge + sourceBadge(c.source) +
+          aiBadge + sizeBadge + sourceBadge(c.source) +
         '</div>' +
         '<div class="phone">+' + esc(c.phone) + '</div>' +
         '<div class="tags">' + matchTag + stageTag + msgTag + '</div>' +
@@ -432,22 +450,20 @@ async function toggleAI(phone, el) {
   }
 }
 
-async function toggleBig(phone, el) {
-  const isBig = el.checked;
+async function setSize(phone, size) {
   try {
-    const res = await fetch('/api/v1/ai/big-customer/' + encodeURIComponent(phone), {
+    const res = await fetch('/api/v1/ai/customer-size/' + encodeURIComponent(phone), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ is_big: isBig }),
+      body: JSON.stringify({ size: size }),
     });
     if (!res.ok) throw new Error(res.statusText);
     const c = customers.find(x => x.phone === phone);
-    if (c) c.is_big_customer = isBig ? 1 : 0;
+    if (c) c.customer_size = size;
     updateStats();
     render();
   } catch (e) {
-    el.checked = !el.checked;
-    alert('Toggle failed: ' + e.message);
+    alert('Size update failed: ' + e.message);
   }
 }
 
@@ -458,6 +474,7 @@ function onFilterChange() { currentPage = 1; render(); }
 document.getElementById('search').addEventListener('input', onFilterChange);
 document.getElementById('f-source').addEventListener('change', onFilterChange);
 document.getElementById('f-ai').addEventListener('change', onFilterChange);
+document.getElementById('f-size').addEventListener('change', onFilterChange);
 document.getElementById('f-type').addEventListener('change', onFilterChange);
 
 loadCustomers();

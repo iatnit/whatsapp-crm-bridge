@@ -296,7 +296,7 @@ async def list_ai_customers():
             "match_status": c.get("match_status", "unmatched"),
             "total_messages": c.get("total_messages", 0),
             "ai_disabled": c.get("ai_disabled", 0),
-            "is_big_customer": c.get("is_big_customer", 0),
+            "customer_size": c.get("customer_size") or "",
             "relationship_stage": rel_stage,
             "source": "both" if hs else "local",
             "hubspot_id": hs["id"] if hs else None,
@@ -324,7 +324,7 @@ async def list_ai_customers():
             "match_status": "hubspot_only",
             "total_messages": 0,
             "ai_disabled": 0,
-            "is_big_customer": 0,
+            "customer_size": "",
             "relationship_stage": "",
             "source": "hubspot",
             "hubspot_id": h["id"],
@@ -367,18 +367,23 @@ async def list_ai_disabled():
     return {"count": len(customers), "customers": customers}
 
 
-@app.post("/api/v1/ai/big-customer/{phone}")
-async def toggle_big_customer(phone: str, payload: dict):
-    """Mark or unmark a customer as big/key customer.
+_VALID_SIZES = {"big", "medium", "small", ""}
 
-    Body: {"is_big": true}
+
+@app.post("/api/v1/ai/customer-size/{phone}")
+async def set_customer_size_api(phone: str, payload: dict):
+    """Set customer size classification.
+
+    Body: {"size": "big"}  — valid: big, medium, small, "" (none)
     """
-    from app.store.conversations import set_big_customer
-    is_big = bool(payload.get("is_big", False))
-    found = await set_big_customer(phone, is_big)
+    from app.store.conversations import set_customer_size
+    size = payload.get("size", "")
+    if size not in _VALID_SIZES:
+        return JSONResponse({"error": f"Invalid size: {size}"}, status_code=400)
+    found = await set_customer_size(phone, size)
     if not found:
         return JSONResponse({"error": f"Phone {phone} not found"}, status_code=404)
-    return {"status": "ok", "phone": phone, "is_big_customer": is_big}
+    return {"status": "ok", "phone": phone, "customer_size": size}
 
 
 @app.post("/api/v1/ai/tags/{phone}")

@@ -67,6 +67,14 @@ MIGRATIONS = [
     """
     ALTER TABLE conversations ADD COLUMN is_big_customer INTEGER DEFAULT 0;
     """,
+    # Customer size classification: big/medium/small (replaces is_big_customer)
+    """
+    ALTER TABLE conversations ADD COLUMN customer_size TEXT DEFAULT '';
+    """,
+    # Migrate existing is_big_customer=1 to customer_size='big'
+    """
+    UPDATE conversations SET customer_size = 'big' WHERE is_big_customer = 1 AND (customer_size = '' OR customer_size IS NULL);
+    """,
 ]
 
 
