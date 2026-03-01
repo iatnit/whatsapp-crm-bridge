@@ -13,7 +13,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .refresh-btn { background: rgba(255,255,255,.2); border: 1px solid rgba(255,255,255,.4); color: #fff; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; }
 .refresh-btn:hover { background: rgba(255,255,255,.3); }
 .stats { display: flex; gap: 12px; padding: 12px 20px; background: #fff; border-bottom: 1px solid #e0e0e0; flex-wrap: wrap; }
-.stat { padding: 8px 16px; border-radius: 8px; background: #f0f2f5; font-size: 14px; white-space: nowrap; }
+.stat { padding: 8px 16px; border-radius: 8px; background: #f0f2f5; font-size: 14px; white-space: nowrap; cursor: pointer; transition: all .15s; user-select: none; }
+.stat:hover { background: #e0e0e0; }
+.stat.active { background: #008069; color: #fff; }
+.stat.active b { color: #fff; }
 .stat b { color: #008069; }
 .controls { padding: 12px 20px; background: #fff; display: flex; gap: 10px; flex-wrap: wrap; border-bottom: 1px solid #e0e0e0; }
 .controls input { flex: 1; min-width: 140px; padding: 10px 14px; border: 1px solid #d1d7db; border-radius: 8px; font-size: 14px; outline: none; }
@@ -102,13 +105,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 </div>
 
 <div class="stats" id="stats">
-  <div class="stat">Total: <b id="s-total">-</b></div>
-  <div class="stat">AI On: <b id="s-on">-</b></div>
-  <div class="stat">AI Off: <b id="s-off">-</b></div>
-  <div class="stat">B:<b id="s-big">-</b> M:<b id="s-med">-</b> S:<b id="s-sml">-</b></div>
-  <div class="stat">Both: <b id="s-both">-</b></div>
-  <div class="stat">HubSpot: <b id="s-hs">-</b></div>
-  <div class="stat">Local: <b id="s-local">-</b></div>
+  <div class="stat active" onclick="statClick('all')" id="st-all">Total: <b id="s-total">-</b></div>
+  <div class="stat" onclick="statClick('ai-on')" id="st-ai-on">AI On: <b id="s-on">-</b></div>
+  <div class="stat" onclick="statClick('ai-off')" id="st-ai-off">AI Off: <b id="s-off">-</b></div>
+  <div class="stat" onclick="statClick('big')" id="st-big">Big: <b id="s-big">-</b></div>
+  <div class="stat" onclick="statClick('medium')" id="st-medium">Med: <b id="s-med">-</b></div>
+  <div class="stat" onclick="statClick('small')" id="st-small">Small: <b id="s-sml">-</b></div>
+  <div class="stat" onclick="statClick('both')" id="st-both">Both: <b id="s-both">-</b></div>
+  <div class="stat" onclick="statClick('hubspot')" id="st-hubspot">HubSpot: <b id="s-hs">-</b></div>
+  <div class="stat" onclick="statClick('local')" id="st-local">Local: <b id="s-local">-</b></div>
 </div>
 
 <div class="controls">
@@ -157,6 +162,37 @@ let openDropdown = null;
 let currentPage = 1;
 const PAGE_SIZE = 50;
 const SOURCE_ORDER = { both: 0, hubspot: 1, local: 2 };
+
+// Stat button → dropdown mapping
+const STAT_MAP = {
+  'all':     { source: 'all', ai: 'all', size: 'all' },
+  'ai-on':   { ai: 'on' },
+  'ai-off':  { ai: 'off' },
+  'big':     { size: 'big' },
+  'medium':  { size: 'medium' },
+  'small':   { size: 'small' },
+  'both':    { source: 'both' },
+  'hubspot': { source: 'hubspot' },
+  'local':   { source: 'local' },
+};
+
+function statClick(key) {
+  // Reset all dropdowns first
+  document.getElementById('f-source').value = 'all';
+  document.getElementById('f-ai').value = 'all';
+  document.getElementById('f-size').value = 'all';
+  document.getElementById('f-type').value = 'all';
+  // Apply mapped values
+  const m = STAT_MAP[key] || {};
+  if (m.source) document.getElementById('f-source').value = m.source;
+  if (m.ai) document.getElementById('f-ai').value = m.ai;
+  if (m.size) document.getElementById('f-size').value = m.size;
+  // Highlight active stat
+  document.querySelectorAll('.stat').forEach(s => s.classList.remove('active'));
+  document.getElementById('st-' + key).classList.add('active');
+  currentPage = 1;
+  render();
+}
 
 async function loadCustomers() {
   try {
@@ -470,7 +506,11 @@ async function setSize(phone, size) {
 function prevPage() { if (currentPage > 1) { currentPage--; render(); window.scrollTo(0, 0); } }
 function nextPage() { currentPage++; render(); window.scrollTo(0, 0); }
 
-function onFilterChange() { currentPage = 1; render(); }
+function onFilterChange() {
+  document.querySelectorAll('.stat').forEach(s => s.classList.remove('active'));
+  currentPage = 1;
+  render();
+}
 document.getElementById('search').addEventListener('input', onFilterChange);
 document.getElementById('f-source').addEventListener('change', onFilterChange);
 document.getElementById('f-ai').addEventListener('change', onFilterChange);
