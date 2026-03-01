@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     feishu_bot_enabled: bool = False
     feishu_bot_allowed_users: str = ""          # comma-separated open_id list
     feishu_bot_verification_token: str = ""
+    feishu_bot_reply_webhook: str = ""      # group bot webhook for replies
 
     # --- HubSpot ---
     hubspot_access_token: str = ""   # Private App access token

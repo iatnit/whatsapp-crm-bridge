@@ -7,8 +7,9 @@ from collections import OrderedDict
 
 from fastapi import APIRouter, Request
 
+import httpx
+
 from app.config import settings
-from app.writers.feishu_writer import _get_tenant_token, _get_http, BASE_URL
 
 logger = logging.getLogger(__name__)
 
@@ -39,31 +40,24 @@ def _is_duplicate(event_id: str) -> bool:
 # ── Reply helper ─────────────────────────────────────────────────────
 
 async def _reply_to_feishu(chat_id: str, text: str) -> bool:
-    """Send a text message to a Feishu chat via the IM API."""
+    """Send a text message via Feishu group bot webhook."""
+    webhook_url = settings.feishu_bot_reply_webhook
+    if not webhook_url:
+        logger.error("FEISHU_BOT_REPLY_WEBHOOK not configured")
+        return False
     try:
-        token = await _get_tenant_token()
-        http = _get_http()
-        url = f"{BASE_URL}/im/v1/messages?receive_id_type=chat_id"
-        import json
-        resp = await http.post(
-            url,
-            headers={
-                "Authorization": f"Bearer {token}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "receive_id": chat_id,
-                "msg_type": "text",
-                "content": json.dumps({"text": text}),
-            },
-        )
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.post(
+                webhook_url,
+                json={"msg_type": "text", "content": {"text": text}},
+            )
         data = resp.json()
-        if data.get("code") != 0:
-            logger.error("Feishu reply failed: %s", data)
+        if data.get("StatusCode") != 0 and data.get("code") != 0:
+            logger.error("Feishu webhook reply failed: %s", data)
             return False
         return True
     except Exception as e:
-        logger.exception("Feishu reply error: %s", e)
+        logger.exception("Feishu webhook reply error: %s", e)
         return False
 
 
