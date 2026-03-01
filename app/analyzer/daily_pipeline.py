@@ -24,7 +24,7 @@ from app.writers.feishu_writer import (
 from app.writers.hubspot_writer import (
     ensure_contact as hubspot_ensure_contact,
     ensure_note as hubspot_ensure_note,
-    create_deal as hubspot_create_deal,
+    ensure_deal as hubspot_ensure_deal,
     clear_contact_cache as hubspot_clear_cache,
     build_hubspot_properties,
 )
@@ -293,7 +293,7 @@ async def run_daily_pipeline() -> dict:
                 order_desc = order_info.get("order_description", "")
                 order_products = order_info.get("order_products", [])
                 deal_name = f"{feishu_name} - {order_desc or ', '.join(order_products) or 'WhatsApp订单'}"
-                deal_id = await hubspot_create_deal(
+                deal_id = await hubspot_ensure_deal(
                     contact_id=hs_contact_id,
                     deal_name=deal_name,
                     stage="closedwon",

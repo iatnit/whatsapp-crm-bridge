@@ -109,7 +109,7 @@ async def _call_anthropic(user_prompt: str) -> dict | None:
     """Call Anthropic Claude API (async)."""
     import anthropic
 
-    client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key, timeout=60)
 
     try:
         response = await client.messages.create(
@@ -122,6 +122,6 @@ async def _call_anthropic(user_prompt: str) -> dict | None:
         logger.info("Claude analysis complete (%d chars)", len(text))
         return _parse_llm_text(text)
 
-    except anthropic.APIError as e:
+    except Exception as e:
         logger.error("Claude API error: %s", e)
         return None

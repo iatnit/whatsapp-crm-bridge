@@ -7,7 +7,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from app.config import settings
 from app.store.database import init_db
@@ -96,7 +96,13 @@ app.include_router(webhook_router)
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    from app.store.database import get_db
+    try:
+        async with get_db() as db:
+            await db.execute("SELECT 1")
+        return {"status": "ok", "db": "ok"}
+    except Exception:
+        return JSONResponse({"status": "error", "db": "failed"}, status_code=503)
 
 
 @app.post("/api/v1/analyze/trigger")

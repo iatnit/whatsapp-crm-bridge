@@ -76,6 +76,7 @@ def clear_contact_cache():
     _contact_cache.clear()
     _stage_cache.clear()
     _note_cache.clear()
+    _deal_cache.clear()
 
 
 # ── Contact operations ───────────────────────────────────────────────
@@ -508,6 +509,27 @@ async def ensure_note(
 
 
 # ── Deal operations ──────────────────────────────────────────────────
+
+_deal_cache: dict[str, str] = {}  # "contact_id|deal_name" → deal_id
+
+
+async def ensure_deal(
+    contact_id: str,
+    deal_name: str,
+    amount: float = 0,
+    stage: str = "closedwon",
+    close_date: str = "",
+) -> str | None:
+    """Create a deal with dedup: skip if same contact+name already created."""
+    cache_key = f"{contact_id}|{deal_name}"
+    if cache_key in _deal_cache:
+        logger.info("HubSpot deal cache hit: %s, skipping", deal_name)
+        return _deal_cache[cache_key]
+    deal_id = await create_deal(contact_id, deal_name, amount, stage, close_date)
+    if deal_id:
+        _deal_cache[cache_key] = deal_id
+    return deal_id
+
 
 async def create_deal(
     contact_id: str,

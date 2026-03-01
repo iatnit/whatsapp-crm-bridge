@@ -180,6 +180,24 @@ async def _has_recent_outbound(phone: str, window: int = 10) -> bool:
     return False
 
 
+async def _call_anthropic_reply(system_prompt: str, user_prompt: str) -> str | None:
+    """Fallback: call Anthropic Claude for auto-reply when Gemini fails."""
+    import anthropic
+
+    client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key, timeout=30)
+    try:
+        response = await client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=settings.auto_reply_max_tokens,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_prompt}],
+        )
+        return response.content[0].text.strip()
+    except Exception as e:
+        logger.error("Anthropic auto-reply fallback failed: %s", e)
+        return None
+
+
 async def _call_gemini(system_prompt: str, user_prompt: str) -> str | None:
     """Call Gemini API and return the reply text."""
     url = (
@@ -367,8 +385,11 @@ async def handle_auto_reply(
             customer_context=customer_context,
         )
 
-        # Call LLM
+        # Call LLM (Gemini primary, Anthropic fallback)
         reply_text = await _call_gemini(system_prompt, user_prompt)
+        if not reply_text and settings.anthropic_api_key:
+            logger.warning("Gemini failed for %s, falling back to Anthropic", phone)
+            reply_text = await _call_anthropic_reply(system_prompt, user_prompt)
         if not reply_text:
             logger.warning("No reply generated for %s", phone)
             return
