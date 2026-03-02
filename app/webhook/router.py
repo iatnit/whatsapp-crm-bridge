@@ -67,6 +67,7 @@ async def _forward_obsidian(
     msg_type: str,
     content: str,
     timestamp: int,
+    media_url: str = "",
 ) -> None:
     """Look up customer_name from conversations table, then forward to Obsidian."""
     from app.config import settings
@@ -95,6 +96,7 @@ async def _forward_obsidian(
             msg_type=msg_type,
             content=content,
             timestamp=timestamp,
+            media_url=media_url,
         )
     except Exception as e:
         logger.warning("Obsidian forward failed: %s", e)
@@ -165,6 +167,7 @@ async def receive_webhook(request: Request):
     # Extract content based on message type
     content = ""
     media_path = ""
+    media_url = ""
 
     if msg_type == "text":
         content = text
@@ -235,6 +238,7 @@ async def receive_webhook(request: Request):
             _forward_obsidian(
                 wa_message_id, phone, display_name,
                 direction, msg_type, content, timestamp,
+                media_url=media_url,
             )
         )
 

@@ -38,6 +38,7 @@ async def forward_to_obsidian(
     msg_type: str,
     content: str,
     timestamp: int,
+    media_url: str = "",
 ) -> None:
     """Fire-and-forget POST to the local Obsidian receiver.
 
@@ -55,6 +56,7 @@ async def forward_to_obsidian(
         "msg_type": msg_type,
         "content": content,
         "timestamp": timestamp,
+        "media_url": media_url,
     }
 
     body = json.dumps(payload, ensure_ascii=False).encode()
