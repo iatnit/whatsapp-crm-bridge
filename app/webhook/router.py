@@ -173,15 +173,15 @@ async def receive_webhook(request: Request):
         content = text
     elif msg_type in ("image", "video", "audio", "document", "voice"):
         content = text or f"[{msg_type}]"
-        # WATI puts media URL in sourceUrl or data.url;
-        # if absent, fall back to the WATI getMedia API endpoint.
+        # WATI puts media path in data (string) or URL in sourceUrl / data.url
         media_url = payload.get("sourceUrl") or ""
         if not media_url:
             data_obj = payload.get("data")
-            if isinstance(data_obj, dict):
+            if isinstance(data_obj, str) and data_obj:
+                # WATI stores media as a relative path, e.g. "data/images/xxx.jpg"
+                media_url = f"{settings.wati_v1_url}/api/v1/getMedia?fileName={data_obj}"
+            elif isinstance(data_obj, dict):
                 media_url = data_obj.get("url", "")
-        if not media_url and wa_message_id:
-            media_url = f"{settings.wati_v1_url}/api/v1/getMedia/{wa_message_id}"
         if media_url:
             customer_name = await _get_customer_name(phone)
             media_path = await download_media(
