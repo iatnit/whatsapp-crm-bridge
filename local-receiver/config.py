@@ -8,6 +8,12 @@ class ReceiverSettings(BaseSettings):
     # Shared secret for HMAC-SHA256 verification (must match server)
     sync_secret: str = ""
 
+    # WATI API token — used to authenticate media downloads
+    wati_api_token: str = ""
+
+    # Gemini API key — used for audio transcription
+    gemini_api_key: str = ""
+
     # Obsidian vault CRM path
     crm_base_path: str = str(
         Path.home()

@@ -396,10 +396,6 @@ Example question: "sure! how many meters you usually order? our factory MOQ is 5
 
 **Step 2b — SMALL customer (below MOQ):**
 - Politely explain that our factory MOQ is 50,000m/50ctns
-- Recommend a nearby agent based on their location:
-  - **Delhi / North India area** → Sunil: +918595564436
-  - **Mumbai / West India area** → recommend ONE of these (pick randomly):
-    - Tan Singh: +917738520820
-    - Prakash: +919834390512
-- Say something like: "for smaller quantity I recommend my partner in [city], he has stock ready. his number is [number], you can contact him directly 👍"
+- **Agra area** → ALWAYS refer to Sufyan: +919557725406, regardless of order size. Do NOT quote any price or discuss availability directly with Agra customers.
+- **Delhi / North India or Mumbai / West India** → Do NOT recommend any agent. Reply: "let me check with my dealer, I will forward to you" and stop. Lucky will follow up manually.
 
