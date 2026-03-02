@@ -196,6 +196,49 @@ async def _transcribe_audio(file_path: Path) -> str | None:
         return None
 
 
+async def _translate_to_chinese(text: str) -> str | None:
+    """Translate text to Chinese using Gemini API.
+
+    Returns translated text if the input is neither English nor Chinese.
+    Returns None if already English/Chinese or on failure.
+    """
+    if not settings.gemini_api_key or not text.strip():
+        return None
+
+    payload = {
+        "contents": [{
+            "parts": [{"text": (
+                f"判断以下文字的语言。"
+                f"如果是英文或中文，只回复 SKIP。"
+                f"如果是其他语言，翻译成中文后只回复翻译结果，不要任何解释。\n\n{text}"
+            )}]
+        }]
+    }
+    url = (
+        "https://generativelanguage.googleapis.com/v1beta/models/"
+        f"gemini-2.0-flash:generateContent?key={settings.gemini_api_key}"
+    )
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(url, json=payload)
+        if resp.status_code != 200:
+            return None
+        result = (
+            resp.json()
+            .get("candidates", [{}])[0]
+            .get("content", {})
+            .get("parts", [{}])[0]
+            .get("text", "")
+            .strip()
+        )
+        if not result or result.upper() == "SKIP":
+            return None
+        return result
+    except Exception as e:
+        logger.warning("Gemini translation failed: %s", e)
+        return None
+
+
 # ── Phone-to-folder mapping ────────────────────────────────────────
 
 _mapping: dict[str, str] | None = None
@@ -510,6 +553,12 @@ async def receive_message(request: Request):
                     content = f"【{label}：{saved_filename}】"
             else:
                 content = f"{caption} 【{label}：{saved_filename}】".strip() if caption else f"【{label}：{saved_filename}】"
+
+    # Translate inbound text messages (non-English/Chinese) to Chinese
+    if direction == "inbound" and msg_type == "text" and content:
+        translation = await _translate_to_chinese(content)
+        if translation:
+            content = f"{content} 「{translation}」"
 
     # Write to chat log
     written = _write_message(
