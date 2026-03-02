@@ -77,7 +77,14 @@ async def scheduled_daily_analysis():
             from app.writers.report_writer import write_report_to_feishu
             await write_report_to_feishu(report, summary)
         except Exception as e:
-            logger.warning("CEO日报 write failed (non-blocking): %s", e)
+            logger.warning("CEO日报 Feishu write failed (non-blocking): %s", e)
+
+        # Write report to Notion
+        try:
+            from app.writers.report_writer import write_report_to_notion
+            await write_report_to_notion(report, summary)
+        except Exception as e:
+            logger.warning("CEO日报 Notion write failed (non-blocking): %s", e)
     except Exception:
         _last_pipeline_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         _last_pipeline_ok = False

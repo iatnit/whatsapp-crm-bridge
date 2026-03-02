@@ -177,3 +177,9 @@ async def write_report_to_feishu(report: str, summary: dict) -> str | None:
         logger.error("CEO日报 write failed: %s", e)
 
     return None
+
+
+async def write_report_to_notion(report: str, summary: dict) -> str | None:
+    """Write daily report to Notion. Delegates to notion_writer."""
+    from app.writers.notion_writer import write_report_to_notion as _write
+    return await _write(report, summary)

@@ -63,6 +63,10 @@ class Settings(BaseSettings):
     obsidian_sync_secret: str = ""       # shared HMAC-SHA256 secret
     obsidian_sync_enabled: bool = False
 
+    # --- Notion ---
+    notion_token: str = ""             # Notion Integration Secret (ntn_xxx)
+    notion_report_db_id: str = ""      # Database ID for daily CEO report
+
     # --- Notifications ---
     feishu_webhook_url: str = ""       # Feishu group bot webhook for daily reminders
     reminder_hour: int = 9             # daily reminder time (CST hour, 0-23)
