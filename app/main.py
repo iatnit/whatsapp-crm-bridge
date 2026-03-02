@@ -239,6 +239,16 @@ async def manual_trigger():
     from app.store.conversations import get_unmatched_conversations
     unmatched = await get_unmatched_conversations()
     report = generate_daily_report(summary, unmatched=unmatched)
+    try:
+        from app.writers.report_writer import write_report_to_feishu
+        await write_report_to_feishu(report, summary)
+    except Exception as e:
+        logger.warning("Manual trigger Feishu write failed: %s", e)
+    try:
+        from app.writers.report_writer import write_report_to_notion
+        await write_report_to_notion(report, summary)
+    except Exception as e:
+        logger.warning("Manual trigger Notion write failed: %s", e)
     return {"summary": summary, "report": report}
 
 

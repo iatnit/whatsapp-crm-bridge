@@ -62,7 +62,7 @@ async def _sync_phone(phone: str, display_name: str, customer_name: str) -> int:
         if not item.get("owner"):
             continue
 
-        ts = int(item.get("timestamp") or 0)
+        ts = int(float(item.get("timestamp") or 0))
         if ts < cutoff:
             continue
 
