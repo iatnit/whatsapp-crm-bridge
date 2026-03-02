@@ -115,6 +115,17 @@ async def lifespan(app: FastAPI):
         id="daily_analysis",
     )
 
+    # Outbound message sync: poll WATI API every 5 min to capture agent replies
+    if settings.obsidian_sync_enabled and settings.wati_api_token:
+        from app.webhook.outbound_sync import sync_outbound_messages
+        scheduler.add_job(
+            sync_outbound_messages,
+            "interval",
+            minutes=5,
+            id="outbound_sync",
+        )
+        logger.info("Outbound sync enabled: polling WATI every 5 minutes")
+
     # Morning follow-up reminder (CST timezone)
     if settings.feishu_webhook_url:
         from app.notifier.daily_reminder import send_daily_reminder
