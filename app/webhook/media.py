@@ -15,10 +15,6 @@ logger = logging.getLogger(__name__)
 
 # ── Filename helpers ─────────────────────────────────────────────────
 
-# Daily sequence counter: "safe_name-YYYYMMDD" → int
-_daily_seq: dict[str, int] = {}
-_seq_date: str = ""  # track current date to reset on day change
-
 
 def sanitize_name(name: str) -> str:
     """Sanitize a customer name for use in filenames.
@@ -44,19 +40,28 @@ def sanitize_name(name: str) -> str:
     return name or "unknown"
 
 
-def _next_seq(key: str) -> int:
-    """Return next sequence number for a name+date combination.
+def _next_seq_from_files(media_dir: Path, safe_name: str, date_str: str) -> int:
+    """Return next sequence by scanning existing files on disk.
 
-    Resets the entire cache on day change to prevent unbounded growth.
+    This keeps sequence stable across process restarts.
     """
-    global _seq_date
-    cst = timezone(timedelta(hours=8))
-    today = datetime.now(cst).strftime("%Y%m%d")
-    if today != _seq_date:
-        _daily_seq.clear()
-        _seq_date = today
-    _daily_seq[key] = _daily_seq.get(key, 0) + 1
-    return _daily_seq[key]
+    pattern = re.compile(
+        rf"^{re.escape(safe_name)}-{re.escape(date_str)}-(\d+)\.[A-Za-z0-9]+$"
+    )
+    max_seq = 0
+    if not media_dir.exists():
+        return 1
+    for file_path in media_dir.iterdir():
+        if not file_path.is_file():
+            continue
+        m = pattern.match(file_path.name)
+        if not m:
+            continue
+        try:
+            max_seq = max(max_seq, int(m.group(1)))
+        except ValueError:
+            continue
+    return max_seq + 1
 
 
 # ── Download ─────────────────────────────────────────────────────────
@@ -64,8 +69,10 @@ def _next_seq(key: str) -> int:
 async def download_media(
     message_id: str,
     url: str,
+    customer_name: str = "",
     display_name: str = "",
     phone: str = "",
+    timestamp: int = 0,
 ) -> str | None:
     """Download a media file from a URL provided by WATI.
 
@@ -99,22 +106,25 @@ async def download_media(
         content_type = resp.headers.get("content-type", "")
         ext = _ext_from_mime(content_type) or _ext_from_url(url) or ".bin"
 
-        # Build human-readable filename: {name}-{YYYYMMDD}-{seq}.{ext}
+        # Build filename: {customer}-{YYYYMMDD}-{seq}.{ext}
         cst = timezone(timedelta(hours=8))
-        date_str = datetime.now(cst).strftime("%Y%m%d")
-        safe_name = sanitize_name(display_name or phone)
-        seq_key = f"{safe_name}-{date_str}"
-        seq = _next_seq(seq_key)
-        filename = f"{safe_name}-{date_str}-{seq:02d}{ext}"
+        if timestamp > 0:
+            date_str = datetime.fromtimestamp(timestamp, tz=cst).strftime("%Y%m%d")
+        else:
+            date_str = datetime.now(cst).strftime("%Y%m%d")
+
+        safe_name = sanitize_name(customer_name or display_name or phone)
+        seq = _next_seq_from_files(settings.media_dir, safe_name, date_str)
+        filename = f"{safe_name}-{date_str}-{seq:03d}{ext}"
 
         dest: Path = settings.media_dir / filename
         dest.parent.mkdir(parents=True, exist_ok=True)
 
-        # Avoid collision with existing files (max 50 attempts to prevent infinite loop)
+        # Avoid collision if another message is written at the same time.
         attempts = 0
         while dest.exists() and attempts < 50:
-            seq = _next_seq(seq_key)
-            filename = f"{safe_name}-{date_str}-{seq:02d}{ext}"
+            seq += 1
+            filename = f"{safe_name}-{date_str}-{seq:03d}{ext}"
             dest = settings.media_dir / filename
             attempts += 1
         if dest.exists():

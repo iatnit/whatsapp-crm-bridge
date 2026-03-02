@@ -14,6 +14,25 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1")
 
 
+async def _get_customer_name(phone: str) -> str:
+    """Get canonical customer name from conversations table."""
+    if not phone:
+        return ""
+    try:
+        from app.store.database import get_db
+        async with get_db() as db:
+            cursor = await db.execute(
+                "SELECT customer_name FROM conversations WHERE phone = ?",
+                (phone,),
+            )
+            row = await cursor.fetchone()
+            if row:
+                return row["customer_name"] or ""
+    except Exception as e:
+        logger.warning("Customer name lookup failed for %s: %s", phone, e)
+    return ""
+
+
 async def _hubspot_upsert_contact(phone: str, display_name: str) -> None:
     """Fire-and-forget HubSpot contact upsert with first_contact_date.
 
@@ -158,9 +177,13 @@ async def receive_webhook(request: Request):
             if isinstance(data_obj, dict):
                 media_url = data_obj.get("url", "")
         if media_url:
+            customer_name = await _get_customer_name(phone)
             media_path = await download_media(
                 wa_message_id, media_url,
-                display_name=display_name, phone=phone,
+                customer_name=customer_name,
+                display_name=display_name,
+                phone=phone,
+                timestamp=timestamp,
             ) or ""
     elif msg_type == "sticker":
         content = "[sticker]"
