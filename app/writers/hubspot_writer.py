@@ -226,6 +226,10 @@ async def update_contact(
         logger.error("HubSpot update contact %s failed [%d]: %s", contact_id, resp.status_code, resp.text[:200])
         return False
 
+    # Keep stage cache in sync so regression-prevention logic sees fresh values
+    if "customer_stage" in properties:
+        _stage_cache[contact_id] = properties["customer_stage"]
+
     logger.debug("HubSpot updated contact %s", contact_id)
     return True
 

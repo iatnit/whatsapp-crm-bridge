@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import time
 from typing import Any
 
 from fastapi import APIRouter, Request
@@ -162,7 +163,10 @@ async def receive_webhook(request: Request):
     direction = "outbound" if is_outbound else "inbound"
     msg_type = payload.get("type", "text")
     text = payload.get("text", "")
-    timestamp = int(payload.get("timestamp", "0") or "0")
+    try:
+        timestamp = int(payload.get("timestamp", "0") or "0")
+    except (ValueError, TypeError):
+        timestamp = int(time.time())
 
     # Extract content based on message type
     content = ""

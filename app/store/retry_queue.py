@@ -41,7 +41,7 @@ async def enqueue(
     args: dict,
     error_msg: str = "",
 ) -> int | None:
-    """Add a failed write to the retry queue.
+    """Add a failed write to the retry queue (idempotent — deduplicates pending items).
 
     Args:
         target: 'feishu' or 'hubspot'
@@ -51,14 +51,28 @@ async def enqueue(
 
     Returns the queue item ID or None.
     """
+    args_json = json.dumps(args, ensure_ascii=False, sort_keys=True)
     async with get_db() as db:
+        # Deduplicate: if an identical pending item exists, skip insertion
+        cursor = await db.execute(
+            """
+            SELECT id FROM retry_queue
+            WHERE target = ? AND operation = ? AND args_json = ? AND status = 'pending'
+            LIMIT 1
+            """,
+            (target, operation, args_json),
+        )
+        existing = await cursor.fetchone()
+        if existing:
+            logger.debug("Retry already queued: %s.%s (id=%d), skipping duplicate", target, operation, existing[0])
+            return existing[0]
+
         cursor = await db.execute(
             """
             INSERT INTO retry_queue (target, operation, args_json, error_msg, created_at)
             VALUES (?, ?, ?, ?, ?)
             """,
-            (target, operation, json.dumps(args, ensure_ascii=False),
-             error_msg, datetime.now(timezone.utc).isoformat()),
+            (target, operation, args_json, error_msg, datetime.now(timezone.utc).isoformat()),
         )
         await db.commit()
         item_id = cursor.lastrowid
