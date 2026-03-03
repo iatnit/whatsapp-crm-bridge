@@ -73,7 +73,7 @@ async def _fetch_new_followups(since_ms: int) -> list[dict]:
             "conjunction": "and",
             "conditions": [{
                 "field_name": "跟进时间",
-                "operator": "isGreater",
+                "operator": "isAfter",
                 "value": [str(since_ms)],
             }],
         }
