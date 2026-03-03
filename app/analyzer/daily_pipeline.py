@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import time
 from datetime import datetime, timedelta, timezone
 from itertools import groupby
 from operator import itemgetter
@@ -37,21 +38,48 @@ logger = logging.getLogger(__name__)
 _ANALYSIS_CACHE_PATH = Path("data/analysis_cache.json")
 
 
+_CACHE_TTL_SECONDS = 48 * 3600  # discard cached analyses older than 48 hours
+
+
 def _load_analysis_cache() -> dict[str, dict]:
-    """Load cached analysis results keyed by phone."""
-    if _ANALYSIS_CACHE_PATH.exists():
-        try:
-            return json.loads(_ANALYSIS_CACHE_PATH.read_text())
-        except Exception:
-            pass
-    return {}
+    """Load cached analysis results keyed by phone.
+
+    Each entry is stored as {"analysis": {...}, "cached_at": <unix_ts>}.
+    Entries older than _CACHE_TTL_SECONDS are silently dropped.
+    Legacy entries without "cached_at" are always dropped.
+    """
+    if not _ANALYSIS_CACHE_PATH.exists():
+        return {}
+    try:
+        raw: dict = json.loads(_ANALYSIS_CACHE_PATH.read_text())
+    except Exception:
+        return {}
+
+    now = time.time()
+    result: dict[str, dict] = {}
+    for phone, entry in raw.items():
+        if not isinstance(entry, dict) or "cached_at" not in entry:
+            continue  # legacy format — drop
+        if now - entry["cached_at"] > _CACHE_TTL_SECONDS:
+            continue  # expired — drop
+        result[phone] = entry["analysis"]
+
+    dropped = len(raw) - len(result)
+    if dropped:
+        logger.debug("Analysis cache: loaded %d entries, dropped %d expired", len(result), dropped)
+    return result
 
 
 def _save_analysis_cache(cache: dict[str, dict]) -> None:
-    """Save analysis cache to disk."""
+    """Save analysis cache to disk with timestamps for TTL enforcement."""
     try:
         _ANALYSIS_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        _ANALYSIS_CACHE_PATH.write_text(json.dumps(cache, ensure_ascii=False))
+        now = time.time()
+        serializable = {
+            phone: {"analysis": analysis, "cached_at": now}
+            for phone, analysis in cache.items()
+        }
+        _ANALYSIS_CACHE_PATH.write_text(json.dumps(serializable, ensure_ascii=False))
     except Exception as e:
         logger.warning("Failed to save analysis cache: %s", e)
 

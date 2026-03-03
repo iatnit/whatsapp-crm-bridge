@@ -73,7 +73,12 @@ async def _get_tenant_token() -> str:
         )
         data = resp.json()
         if data.get("code") != 0:
-            raise RuntimeError(f"Feishu token error: {data}")
+            logger.error("Feishu token refresh failed: %s", data)
+            # Fall back to existing token if still usable, otherwise return ""
+            if _token:
+                logger.warning("Using existing (possibly expired) Feishu token as fallback")
+                return _token
+            return ""
 
         _token = data["tenant_access_token"]
         _token_expires_at = time.time() + data.get("expire", 7200)
