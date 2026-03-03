@@ -5,7 +5,7 @@ data/feishu_hs_sync.json to fetch only new records since last run.
 
 Flow per record:
   1. Extract customer name from 客户名称 linked field
-  2. Look up phone via Feishu 客户管理CRM by customer name
+  2. Look up phone via Feishu 客户管理CRM by customer name (cached per run)
   3. Find or create HubSpot contact by phone / name
   4. Create a HubSpot Note with the followup content
   5. Advance watermark
@@ -52,7 +52,12 @@ async def _feishu_token() -> str:
 
 
 async def _fetch_new_followups(since_ms: int) -> list[dict]:
-    """Fetch followup records created/modified after since_ms."""
+    """Page through all followup records and return those newer than since_ms.
+
+    Feishu date-field server-side filtering is unreliable, so we fetch all
+    pages and filter client-side. With ~1000 records this takes ~15 s which
+    is acceptable for a 30-min scheduled job.
+    """
     if not settings.feishu_app_token or not settings.feishu_table_followup:
         return []
 
@@ -63,82 +68,57 @@ async def _fetch_new_followups(since_ms: int) -> list[dict]:
         f"/tables/{settings.feishu_table_followup}/records/search"
     )
 
-    payload: dict = {
-        "automatic_fields": True,
-        "page_size": 100,
-        # Sort descending so we can stop early once records are older than watermark
-        "sort": [{"field_name": "跟进时间", "desc": True}],
-    }
-
-    results = []
+    all_items: list[dict] = []
     page_token = ""
 
-    async with httpx.AsyncClient(timeout=20) as client:
+    async with httpx.AsyncClient(timeout=30) as client:
         while True:
+            payload: dict = {"automatic_fields": True, "page_size": 100}
             if page_token:
                 payload["page_token"] = page_token
             resp = await client.post(url, json=payload, headers=headers)
             data = resp.json()
             if data.get("code") != 0:
-                logger.warning("Feishu followup sort unsupported, retrying without sort: %s", data.get("msg"))
-                payload.pop("sort", None)
-                payload.pop("page_token", None)
-                page_token = ""
-                # Fallback: fetch all pages without sort, filter client-side
-                all_items = []
-                while True:
-                    if page_token:
-                        payload["page_token"] = page_token
-                    resp2 = await client.post(url, json=payload, headers=headers)
-                    data2 = resp2.json()
-                    if data2.get("code") != 0:
-                        logger.error("Feishu followup search error: %s", data2.get("msg"))
-                        break
-                    for item in data2.get("data", {}).get("items", []):
-                        ts = int(item.get("fields", {}).get("跟进时间") or 0)
-                        if ts > since_ms:
-                            all_items.append(item)
-                    if not data2.get("data", {}).get("has_more"):
-                        break
-                    page_token = data2.get("data", {}).get("page_token", "")
-                results = all_items
+                logger.error("Feishu followup search error: %s", data.get("msg"))
                 break
-
-            stop_early = False
-            for item in data.get("data", {}).get("items", []):
-                ts = int(item.get("fields", {}).get("跟进时间") or 0)
-                if ts > since_ms:
-                    results.append(item)
-                else:
-                    stop_early = True  # sorted desc: everything after is older
-
-            if stop_early or not data.get("data", {}).get("has_more"):
+            all_items.extend(data.get("data", {}).get("items", []))
+            if not data.get("data", {}).get("has_more"):
                 break
             page_token = data.get("data", {}).get("page_token", "")
 
-    logger.info("Feishu: fetched %d followup records since %d", len(results), since_ms)
+    results = [
+        item for item in all_items
+        if int(item.get("fields", {}).get("跟进时间") or 0) > since_ms
+    ]
+    logger.info(
+        "Feishu: scanned %d records total, %d new since %d",
+        len(all_items), len(results), since_ms,
+    )
     return results
 
 
-async def _get_customer_phone(customer_name: str) -> str:
-    """Look up phone number for a customer name from Feishu CRM."""
-    if not customer_name:
-        return ""
-    try:
-        from app.writers.feishu_writer import _search_records
-        items = await _search_records(
-            table_id=settings.feishu_table_customers,
-            field_name="客户",
-            value=customer_name,
-        )
-        if items:
-            phone = items[0].get("fields", {}).get("联系电话", "") or ""
-            if isinstance(phone, list):
-                phone = phone[0] if phone else ""
-            return str(phone).strip()
-    except Exception as e:
-        logger.debug("Phone lookup failed for %s: %s", customer_name, e)
-    return ""
+async def _get_customer_phone(customer_name: str, cache: dict) -> str:
+    """Look up phone number for a customer name, using an in-run cache."""
+    if customer_name in cache:
+        return cache[customer_name]
+    phone = ""
+    if customer_name:
+        try:
+            from app.writers.feishu_writer import _search_records
+            items = await _search_records(
+                table_id=settings.feishu_table_customers,
+                field_name="客户",
+                value=customer_name,
+            )
+            if items:
+                raw = items[0].get("fields", {}).get("联系电话", "") or ""
+                if isinstance(raw, list):
+                    raw = raw[0] if raw else ""
+                phone = str(raw).strip()
+        except Exception as e:
+            logger.debug("Phone lookup failed for %s: %s", customer_name, e)
+    cache[customer_name] = phone
+    return phone
 
 
 def _extract_customer_name(field_value) -> str:
@@ -177,12 +157,14 @@ async def sync_feishu_to_hubspot() -> int:
 
     records = await _fetch_new_followups(since_ms)
     if not records:
+        logger.info("Feishu→HubSpot sync: no new followup records")
         return 0
 
     from app.writers.hubspot_writer import ensure_contact, create_note
 
     created = 0
     max_ts = since_ms
+    phone_cache: dict[str, str] = {}  # customer_name → phone, avoids duplicate lookups
 
     for record in records:
         record_id = record.get("record_id", "")
@@ -206,8 +188,8 @@ async def sync_feishu_to_hubspot() -> int:
 
         logger.info("Syncing followup [%s] %s → HubSpot", record_id[:8], customer_name)
 
-        # Get phone for HubSpot lookup
-        phone = await _get_customer_phone(customer_name)
+        # Get phone (cached)
+        phone = await _get_customer_phone(customer_name, phone_cache)
 
         # Find / create HubSpot contact
         try:
@@ -247,6 +229,5 @@ async def sync_feishu_to_hubspot() -> int:
     state["synced_ids"] = list(synced_ids)
     _save_state(state)
 
-    if created:
-        logger.info("Feishu→HubSpot sync: %d notes created", created)
+    logger.info("Feishu→HubSpot sync complete: %d notes created", created)
     return created
