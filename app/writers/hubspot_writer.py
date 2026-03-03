@@ -83,22 +83,28 @@ def clear_contact_cache():
 async def search_contact_by_phone(phone: str) -> str | None:
     """Search HubSpot for a contact by phone number.
 
+    Searches both the normalized form (+917002426663) and the raw input
+    (+91-70024-26663) so that contacts created with hyphens/spaces are
+    found and not duplicated.
+
     Returns contact ID if found, None otherwise.
     """
     normalized = normalize_phone(phone)
     url = f"{BASE_URL}/crm/v3/objects/contacts/search"
+
+    # Build filter groups: normalized form is always included; raw input added
+    # as a second OR-group when it differs (catches contacts stored with hyphens).
+    filter_groups: list[dict] = [
+        {"filters": [{"propertyName": "phone", "operator": "EQ", "value": normalized}]}
+    ]
+    raw = phone.strip()
+    if raw and raw != normalized:
+        filter_groups.append(
+            {"filters": [{"propertyName": "phone", "operator": "EQ", "value": raw}]}
+        )
+
     payload = {
-        "filterGroups": [
-            {
-                "filters": [
-                    {
-                        "propertyName": "phone",
-                        "operator": "EQ",
-                        "value": normalized,
-                    }
-                ]
-            }
-        ],
+        "filterGroups": filter_groups,
         "properties": ["phone", "firstname", "lastname", "country", "customer_stage"],
         "limit": 1,
     }
@@ -114,11 +120,23 @@ async def search_contact_by_phone(phone: str) -> str | None:
     results = data.get("results", [])
     if results:
         contact_id = results[0].get("id")
-        # Cache current stage for regression prevention
         props = results[0].get("properties", {})
         current_stage = props.get("customer_stage", "")
         if contact_id and current_stage:
             _stage_cache[contact_id] = current_stage
+        # If stored phone differs from normalized form, fix it silently
+        stored_phone = props.get("phone", "")
+        if contact_id and stored_phone and stored_phone != normalized:
+            logger.info(
+                "HubSpot contact %s has non-normalized phone %s → updating to %s",
+                contact_id, stored_phone, normalized,
+            )
+            client2 = _get_http()
+            await client2.patch(
+                f"{BASE_URL}/crm/v3/objects/contacts/{contact_id}",
+                json={"properties": {"phone": normalized}},
+                headers=_headers(),
+            )
         logger.debug("HubSpot found contact %s for phone %s (stage=%s)", contact_id, normalized, current_stage)
         return contact_id
     return None
