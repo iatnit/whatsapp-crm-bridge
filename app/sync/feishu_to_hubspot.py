@@ -68,17 +68,42 @@ async def _fetch_new_followups(since_ms: int) -> list[dict]:
         f"/tables/{settings.feishu_table_followup}/records/search"
     )
 
+    # Try server-side filter on _createdAt (numeric ms field, supports isGreater)
+    # Falls back to full scan + client-side filter if unsupported
+    base_payload: dict = {"automatic_fields": True, "page_size": 100}
+    if since_ms > 0:
+        base_payload["filter"] = {
+            "conjunction": "and",
+            "conditions": [{
+                "field_name": "_createdAt",
+                "operator": "isGreater",
+                "value": [str(since_ms)],
+            }],
+        }
+
     all_items: list[dict] = []
     page_token = ""
+    server_filter_ok = True
 
     async with httpx.AsyncClient(timeout=30) as client:
         while True:
-            payload: dict = {"automatic_fields": True, "page_size": 100}
+            payload = dict(base_payload)
             if page_token:
                 payload["page_token"] = page_token
             resp = await client.post(url, json=payload, headers=headers)
             data = resp.json()
             if data.get("code") != 0:
+                if server_filter_ok and since_ms > 0:
+                    # Filter unsupported — retry without filter
+                    logger.warning(
+                        "Feishu server-side filter failed (%s), falling back to full scan",
+                        data.get("msg"),
+                    )
+                    base_payload.pop("filter", None)
+                    page_token = ""
+                    all_items = []
+                    server_filter_ok = False
+                    continue
                 logger.error("Feishu followup search error: %s", data.get("msg"))
                 break
             all_items.extend(data.get("data", {}).get("items", []))
@@ -86,13 +111,17 @@ async def _fetch_new_followups(since_ms: int) -> list[dict]:
                 break
             page_token = data.get("data", {}).get("page_token", "")
 
+    # Client-side filter by 跟进时间 (guards against server filter using _createdAt vs 跟进时间)
     results = [
         item for item in all_items
         if int(item.get("fields", {}).get("跟进时间") or 0) > since_ms
     ]
     logger.info(
-        "Feishu: scanned %d records total, %d new since %d",
-        len(all_items), len(results), since_ms,
+        "Feishu: fetched %d records%s, %d new since %d",
+        len(all_items),
+        " (server-filtered)" if server_filter_ok else " (full scan)",
+        len(results),
+        since_ms,
     )
     return results
 
