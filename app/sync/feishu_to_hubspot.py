@@ -14,7 +14,6 @@ Flow per record:
 import json
 import logging
 import time
-from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
@@ -69,44 +68,19 @@ async def _fetch_new_followups(since_ms: int) -> list[dict]:
         f"/tables/{settings.feishu_table_followup}/records/search"
     )
 
-    # Try server-side filter on 跟进时间 using isAfter with ExactDate format
-    # Falls back to full scan + client-side filter if unsupported
-    base_payload: dict = {"automatic_fields": True, "page_size": 100}
-    if since_ms > 0:
-        since_date = datetime.fromtimestamp(since_ms / 1000, tz=timezone.utc).strftime("%Y-%m-%d")
-        base_payload["filter"] = {
-            "conjunction": "and",
-            "conditions": [{
-                "field_name": "跟进时间",
-                "operator": "isAfter",
-                "value": [since_date],
-            }],
-        }
-        logger.info("Feishu filter: 跟进时间 isAfter %s", since_date)
-
+    # Feishu date field does not support server-side filtering.
+    # Use max page_size (500) to minimise API calls: 40k records / 500 = ~80 pages × 1.2s ≈ 96s.
     all_items: list[dict] = []
     page_token = ""
-    server_filter_ok = True
 
     async with httpx.AsyncClient(timeout=30) as client:
         while True:
-            payload = dict(base_payload)
+            payload: dict = {"page_size": 500}
             if page_token:
                 payload["page_token"] = page_token
             resp = await client.post(url, json=payload, headers=headers)
             data = resp.json()
             if data.get("code") != 0:
-                if server_filter_ok and since_ms > 0:
-                    # Filter unsupported — retry without filter
-                    logger.warning(
-                        "Feishu server-side filter failed (%s), falling back to full scan",
-                        data.get("msg"),
-                    )
-                    base_payload.pop("filter", None)
-                    page_token = ""
-                    all_items = []
-                    server_filter_ok = False
-                    continue
                 logger.error("Feishu followup search error: %s", data.get("msg"))
                 break
             all_items.extend(data.get("data", {}).get("items", []))
@@ -114,17 +88,13 @@ async def _fetch_new_followups(since_ms: int) -> list[dict]:
                 break
             page_token = data.get("data", {}).get("page_token", "")
 
-    # Client-side filter by 跟进时间 (guards against server filter using _createdAt vs 跟进时间)
     results = [
         item for item in all_items
         if int(item.get("fields", {}).get("跟进时间") or 0) > since_ms
     ]
     logger.info(
-        "Feishu: fetched %d records%s, %d new since %d",
-        len(all_items),
-        " (server-filtered)" if server_filter_ok else " (full scan)",
-        len(results),
-        since_ms,
+        "Feishu: scanned %d records, %d new since %d",
+        len(all_items), len(results), since_ms,
     )
     return results
 
