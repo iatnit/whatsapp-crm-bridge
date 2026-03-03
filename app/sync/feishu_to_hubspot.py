@@ -63,22 +63,12 @@ async def _fetch_new_followups(since_ms: int) -> list[dict]:
         f"/tables/{settings.feishu_table_followup}/records/search"
     )
 
-    # Filter: 跟进时间 > since_ms
     payload: dict = {
         "automatic_fields": True,
         "page_size": 100,
     }
-    if since_ms > 0:
-        payload["filter"] = {
-            "conjunction": "and",
-            "conditions": [{
-                "field_name": "跟进时间",
-                "operator": "isAfter",
-                "value": [str(since_ms)],
-            }],
-        }
 
-    results = []
+    all_items = []
     page_token = ""
 
     async with httpx.AsyncClient(timeout=20) as client:
@@ -91,10 +81,17 @@ async def _fetch_new_followups(since_ms: int) -> list[dict]:
                 logger.error("Feishu followup search error: %s", data.get("msg"))
                 break
             items = data.get("data", {}).get("items", [])
-            results.extend(items)
+            all_items.extend(items)
             if not data.get("data", {}).get("has_more"):
                 break
             page_token = data.get("data", {}).get("page_token", "")
+
+    # Filter client-side by 跟进时间 > since_ms
+    results = []
+    for item in all_items:
+        ts = int(item.get("fields", {}).get("跟进时间") or 0)
+        if ts > since_ms:
+            results.append(item)
 
     logger.info("Feishu: fetched %d followup records since %d", len(results), since_ms)
     return results
