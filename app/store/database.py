@@ -37,6 +37,8 @@ CREATE TABLE IF NOT EXISTS conversations (
 CREATE INDEX IF NOT EXISTS idx_messages_phone ON messages(phone);
 CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp);
 CREATE INDEX IF NOT EXISTS idx_messages_processed ON messages(processed);
+CREATE INDEX IF NOT EXISTS idx_messages_phone_processed ON messages(phone, processed);
+CREATE INDEX IF NOT EXISTS idx_messages_processed_ts ON messages(processed, timestamp);
 """
 
 

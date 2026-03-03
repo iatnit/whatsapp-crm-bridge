@@ -109,10 +109,10 @@ def notify_outbound(phone: str) -> None:
     """
     now = time.time()
     ai_sent = _ai_sent_ts.get(phone, 0)
-    # If AI sent to this phone within the last 30 seconds, this outbound
+    # If AI sent to this phone within the last 120 seconds, this outbound
     # is likely the echo of our own AI message → ignore
-    # (widened from 15s to account for WATI webhook delivery delay)
-    if (now - ai_sent) < 30:
+    # WATI can take up to 60-90s to deliver outbound webhooks; use 120s to be safe.
+    if (now - ai_sent) < 120:
         return
     # Otherwise, a human or external system sent this → pause AI
     _human_takeover[phone] = now
