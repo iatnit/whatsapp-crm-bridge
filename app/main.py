@@ -23,6 +23,9 @@ _app_start_time: float = 0.0
 _last_pipeline_at: str = ""
 _last_pipeline_ok: bool = True
 
+# Keep strong references to background tasks to prevent GC (Python 3.12+)
+_background_tasks: set = set()
+
 # ── Logging ──────────────────────────────────────────────────────────
 
 logging.basicConfig(
@@ -269,7 +272,9 @@ async def manual_feishu_hs_sync():
     """Manually trigger Feishu 跟进记录 → HubSpot Notes sync (runs in background)."""
     import asyncio
     from app.sync.feishu_to_hubspot import sync_feishu_to_hubspot
-    asyncio.create_task(sync_feishu_to_hubspot())
+    task = asyncio.create_task(sync_feishu_to_hubspot())
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
     return {"status": "started", "message": "Sync running in background, check logs for progress"}
 
 
