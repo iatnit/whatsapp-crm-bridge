@@ -133,6 +133,17 @@ async def lifespan(app: FastAPI):
         )
         logger.info("Outbound sync enabled: polling WATI every 5 minutes")
 
+    # Feishu 跟进记录 → HubSpot Notes sync (every 30 min)
+    if settings.hubspot_enabled and settings.feishu_app_token:
+        from app.sync.feishu_to_hubspot import sync_feishu_to_hubspot
+        scheduler.add_job(
+            sync_feishu_to_hubspot,
+            "interval",
+            minutes=30,
+            id="feishu_hs_sync",
+        )
+        logger.info("Feishu→HubSpot sync enabled: every 30 minutes")
+
     # Morning follow-up reminder (CST timezone)
     if settings.feishu_webhook_url:
         from app.notifier.daily_reminder import send_daily_reminder
@@ -250,6 +261,14 @@ async def manual_trigger():
     except Exception as e:
         logger.warning("Manual trigger Notion write failed: %s", e)
     return {"summary": summary, "report": report}
+
+
+@app.post("/api/v1/feishu-hs-sync/trigger", dependencies=[Depends(verify_admin)])
+async def manual_feishu_hs_sync():
+    """Manually trigger Feishu 跟进记录 → HubSpot Notes sync."""
+    from app.sync.feishu_to_hubspot import sync_feishu_to_hubspot
+    created = await sync_feishu_to_hubspot()
+    return {"status": "ok", "notes_created": created}
 
 
 @app.post("/api/v1/reminder/trigger", dependencies=[Depends(verify_admin)])
