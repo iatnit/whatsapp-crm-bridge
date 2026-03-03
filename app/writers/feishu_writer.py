@@ -203,6 +203,80 @@ async def _update_record(
 
 # ── Customer CRM operations ─────────────────────────────────────────
 
+async def list_customers_with_feishu_id() -> list[dict]:
+    """Return all customers from 客户管理CRM that have a valid 6-digit 编号.
+
+    Each item: {"feishu_id": "100004", "name": "USMAN", "phone": "...",
+                 "location": "...", "record_id": "recXXX"}
+    """
+    if not settings.feishu_app_token or not settings.feishu_table_customers:
+        return []
+
+    app_token = settings.feishu_app_token
+    table_id = settings.feishu_table_customers
+    url = f"{BASE_URL}/bitable/v1/apps/{app_token}/tables/{table_id}/records"
+
+    results = []
+    page_token = ""
+    client = _get_http()
+
+    while True:
+        params: dict = {"page_size": 100, "automatic_fields": "true"}
+        if page_token:
+            params["page_token"] = page_token
+
+        for attempt in range(2):
+            resp = await client.get(url, params=params, headers=await _headers())
+            data = resp.json()
+            if data.get("code") in _TOKEN_EXPIRED_CODES and attempt == 0:
+                await _force_refresh_token()
+                continue
+            break
+
+        if data.get("code") != 0:
+            logger.error("Feishu list customers error: %s", data.get("msg"))
+            break
+
+        items = data.get("data", {}).get("items", [])
+        for item in items:
+            fields = item.get("fields", {})
+            raw_num = fields.get("编号", "")
+            if isinstance(raw_num, (int, float)):
+                raw_num = str(int(raw_num))
+            feishu_id = str(raw_num).strip() if raw_num else ""
+
+            # Only include records with a valid 6-digit ID (not placeholder 100)
+            if not feishu_id or feishu_id == "100" or len(feishu_id) < 4:
+                continue
+
+            name = fields.get("客户", "") or ""
+            if isinstance(name, list):
+                name = name[0].get("text", "") if name else ""
+
+            phone_raw = fields.get("联系电话", "") or ""
+            phone = str(phone_raw).strip() if phone_raw else ""
+
+            location_raw = fields.get("国家地区", "") or ""
+            location = str(location_raw).strip() if location_raw else ""
+
+            results.append({
+                "feishu_id": feishu_id,
+                "name": name,
+                "phone": phone,
+                "location": location,
+                "record_id": item.get("record_id", ""),
+            })
+
+        page_info = data.get("data", {}).get("page_token", "")
+        has_more = data.get("data", {}).get("has_more", False)
+        if not has_more:
+            break
+        page_token = page_info
+
+    logger.info("Feishu: found %d customers with 编号", len(results))
+    return results
+
+
 async def search_customer(customer_name: str) -> str | None:
     """Search 客户管理CRM for a customer by name.
 

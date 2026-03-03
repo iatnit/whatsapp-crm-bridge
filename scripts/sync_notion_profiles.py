@@ -218,25 +218,46 @@ async def _gemini_summarize(customer_name: str, crm_file: str, chat_log: str,
 
 # ── Main processing ─────────────────────────────────────────────────────────
 
-async def process_customer(crm_file: Path, dry_run: bool) -> bool:
-    """Process one 6-digit customer file → Notion."""
-    filename = crm_file.stem  # e.g. "100004-USMAN"
-    m = _6DIGIT_RE.match(crm_file.name)
-    if not m:
-        return False
-    feishu_id = m.group(1)  # "100004"
+def _find_local_crm_file(feishu_id: str, customer_name: str) -> Path | None:
+    """Find a 6-digit CRM .md file matching this customer (by ID or name)."""
+    if not CRM_DIR.exists():
+        return None
+    # Try exact ID prefix first
+    for f in CRM_DIR.iterdir():
+        if f.is_file() and f.suffix == ".md" and f.name.startswith(feishu_id):
+            return f
+    # Fallback: name match in filename
+    name_lower = customer_name.lower()
+    for f in CRM_DIR.iterdir():
+        if f.is_file() and f.suffix == ".md" and _6DIGIT_RE.match(f.name):
+            if name_lower in f.stem.lower():
+                return f
+    return None
 
-    # Extract name: everything after the 6-digit prefix and separator
-    raw_name = re.sub(r"^\d{6}[\-：:_\s]+", "", filename).strip()
-    customer_name = raw_name or filename
 
-    logger.info("Processing [%s] %s", feishu_id, customer_name)
+async def process_customer(customer: dict, dry_run: bool) -> bool:
+    """Process one Feishu customer → Notion profile."""
+    feishu_id = customer["feishu_id"]
+    customer_name = customer["name"]
+    phone = customer["phone"]
+    location = customer["location"]
 
-    # Read CRM file
-    crm_content = _read_file_safe(crm_file)
+    logger.info("Processing [%s] %s (phone: %s)", feishu_id, customer_name, phone or "-")
 
-    # Find matching chat-log folder
+    # 1. Read local CRM notes file (if exists)
+    crm_file = _find_local_crm_file(feishu_id, customer_name)
+    crm_content = _read_file_safe(crm_file) if crm_file else ""
+    if crm_file:
+        logger.info("  CRM file: %s", crm_file.name)
+
+    # 2. Find chat-log folder (by name, then by phone)
     chat_folder = _find_chat_folder(customer_name)
+    if not chat_folder and phone:
+        # Try finding by phone number as folder name
+        phone_folder = CRM_DIR / phone
+        if phone_folder.exists() and (phone_folder / "chat-log.md").exists():
+            chat_folder = phone_folder
+
     chat_log = ""
     crm_analyses: list[str] = []
     if chat_folder:
@@ -244,18 +265,14 @@ async def process_customer(crm_file: Path, dry_run: bool) -> bool:
         chat_log = _read_file_safe(chat_folder / "chat-log.md", max_chars=5000)
         crm_analyses = _collect_crm_files(chat_folder)
     else:
-        logger.info("  No matching chat folder for '%s'", customer_name)
+        logger.info("  No chat folder for '%s'", customer_name)
 
-    # Fetch Feishu data
-    feishu_fields = await _feishu_search_customer(customer_name)
+    # 3. Fetch Feishu followup records
     followups = await _feishu_get_followups(customer_name)
-    logger.info("  Feishu: %d fields, %d followups", len(feishu_fields), len(followups))
+    logger.info("  Followups: %d", len(followups))
 
-    # Extract phone from Feishu
-    phone = str(feishu_fields.get("联系电话", "") or "")
-    location = str(feishu_fields.get("国家地区", "") or "")
-
-    # Summarize with Gemini
+    # 4. Summarize with Gemini
+    feishu_fields = {"联系电话": phone, "国家地区": location}
     analysis = await _gemini_summarize(
         customer_name, crm_content, chat_log, crm_analyses, feishu_fields, followups
     )
@@ -269,10 +286,9 @@ async def process_customer(crm_file: Path, dry_run: bool) -> bool:
         logger.info("  [DRY RUN] Would write to Notion")
         return True
 
-    # Write to Notion
+    # 5. Write to Notion
     from app.writers.notion_customer_writer import upsert_customer_profile
 
-    # Build analysis dict compatible with upsert_customer_profile
     notion_analysis = {
         "summary": analysis.get("summary", ""),
         "demand_summary": analysis.get("demand_summary", ""),
@@ -302,37 +318,38 @@ async def process_customer(crm_file: Path, dry_run: bool) -> bool:
 
 
 async def main():
-    parser = argparse.ArgumentParser(description="Sync 6-digit CRM customers to Notion")
+    parser = argparse.ArgumentParser(description="Sync Feishu CRM customers (with 编号) to Notion")
     parser.add_argument("--dry-run", action="store_true", help="Don't write to Notion")
     parser.add_argument("--limit", type=int, default=0, help="Max customers to process")
     args = parser.parse_args()
 
-    if not CRM_DIR.exists():
-        logger.error("CRM directory not found: %s", CRM_DIR)
+    # Fetch all customers with 6-digit 编号 from Feishu
+    from app.writers.feishu_writer import list_customers_with_feishu_id
+    customers = await list_customers_with_feishu_id()
+
+    if not customers:
+        logger.error(
+            "No customers returned from Feishu. "
+            "Check FEISHU_APP_TOKEN and FEISHU_TABLE_CUSTOMERS in .env"
+        )
         sys.exit(1)
 
-    # Find all 6-digit CRM files
-    candidates = sorted([
-        f for f in CRM_DIR.iterdir()
-        if f.is_file() and f.suffix == ".md" and _6DIGIT_RE.match(f.name)
-    ])
-    logger.info("Found %d 6-digit customer files", len(candidates))
+    logger.info("Feishu returned %d customers with 编号", len(customers))
 
     if args.limit:
-        candidates = candidates[:args.limit]
+        customers = customers[:args.limit]
 
     ok = fail = 0
-    for crm_file in candidates:
+    for customer in customers:
         try:
-            success = await process_customer(crm_file, dry_run=args.dry_run)
+            success = await process_customer(customer, dry_run=args.dry_run)
             if success:
                 ok += 1
             else:
                 fail += 1
         except Exception as e:
-            logger.error("Unhandled error for %s: %s", crm_file.name, e)
+            logger.error("Unhandled error for %s: %s", customer.get("name"), e)
             fail += 1
-        # Brief pause to avoid API rate limits
         await asyncio.sleep(1)
 
     logger.info("Done: %d OK, %d failed out of %d customers", ok, fail, ok + fail)
