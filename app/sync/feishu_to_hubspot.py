@@ -79,7 +79,7 @@ async def _fetch_new_followups(since_ms: int) -> list[dict]:
             "conditions": [{
                 "field_name": "跟进时间",
                 "operator": "isAfter",
-                "value": ["ExactDate", since_date],
+                "value": [since_date],
             }],
         }
         logger.info("Feishu filter: 跟进时间 isAfter %s", since_date)
