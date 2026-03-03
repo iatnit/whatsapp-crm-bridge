@@ -376,12 +376,14 @@ async def run_daily_pipeline() -> dict:
                 try:
                     from app.writers.notion_customer_writer import upsert_customer_profile
                     total_msgs = conv.get("total_messages", 0) or len(msgs)
+                    _fs_id = str(feishu_number) if feishu_number else ""
                     await upsert_customer_profile(
                         customer_name=feishu_name,
                         phone=phone,
                         location=location,
                         analysis=analysis,
                         total_messages=total_msgs,
+                        feishu_id=_fs_id,
                     )
                 except Exception as e:
                     logger.warning("Notion customer profile failed for %s: %s", customer_name, e)

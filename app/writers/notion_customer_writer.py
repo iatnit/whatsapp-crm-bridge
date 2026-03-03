@@ -138,6 +138,7 @@ async def _create_customer_page(
     total_messages: int,
     date_str: str,
     ai_blocks: list[dict],
+    feishu_id: str = "",
 ) -> str | None:
     """Create a new customer page with manual notes section + first AI block."""
     date_ms = _today_midnight_ms()
@@ -155,7 +156,7 @@ async def _create_customer_page(
         json={
             "parent": {"database_id": settings.notion_customer_db_id},
             "properties": _build_properties(
-                customer_name, phone, location, products, stage, total_messages, date_ms
+                customer_name, phone, location, products, stage, total_messages, date_ms, feishu_id
             ),
             "children": initial_blocks[:95],
         },
@@ -188,6 +189,7 @@ async def _update_customer_properties(
     products: list[str],
     stage: str,
     total_messages: int,
+    feishu_id: str = "",
 ) -> None:
     """Update database properties on an existing customer page."""
     date_ms = _today_midnight_ms()
@@ -195,7 +197,7 @@ async def _update_customer_properties(
         f"{_NOTION_API}/pages/{page_id}",
         headers=_headers(),
         json={"properties": _build_properties(
-            customer_name, phone, location, products, stage, total_messages, date_ms
+            customer_name, phone, location, products, stage, total_messages, date_ms, feishu_id
         )},
     )
 
@@ -228,6 +230,7 @@ def _build_properties(
     stage: str,
     total_messages: int,
     date_ms: int,
+    feishu_id: str = "",
 ) -> dict:
     props: dict = {
         "客户名": {"title": [{"text": {"content": customer_name or phone}}]},
@@ -238,6 +241,8 @@ def _build_properties(
         props["地区"] = {"rich_text": [{"text": {"content": location}}]}
     if products:
         props["产品兴趣"] = {"rich_text": [{"text": {"content": ", ".join(products)}}]}
+    if feishu_id:
+        props["飞书编号"] = {"rich_text": [{"text": {"content": feishu_id}}]}
     # 客户阶段 is included in the AI block body; skip as DB property to avoid missing-column errors
     if total_messages:
         props["消息数"] = {"number": total_messages}
@@ -251,6 +256,7 @@ async def upsert_customer_profile(
     location: str,
     analysis: dict,
     total_messages: int,
+    feishu_id: str = "",
 ) -> str | None:
     """Upsert a Notion customer profile page.
 
@@ -279,14 +285,14 @@ async def upsert_customer_profile(
             if page_id:
                 await _update_customer_properties(
                     client, page_id, customer_name, phone, location,
-                    products, stage, total_messages,
+                    products, stage, total_messages, feishu_id,
                 )
                 await _append_ai_block(client, page_id, ai_blocks)
                 logger.info("Notion customer profile updated: %s (%s)", customer_name, page_id)
             else:
                 page_id = await _create_customer_page(
                     client, customer_name, phone, location,
-                    products, stage, total_messages, date_str, ai_blocks,
+                    products, stage, total_messages, date_str, ai_blocks, feishu_id,
                 )
                 if page_id:
                     logger.info("Notion customer profile created: %s (%s)", customer_name, page_id)

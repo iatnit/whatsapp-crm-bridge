@@ -291,6 +291,7 @@ async def process_customer(crm_file: Path, dry_run: bool) -> bool:
         location=location or analysis.get("location", ""),
         analysis=notion_analysis,
         total_messages=0,
+        feishu_id=feishu_id,
     )
     if page_id:
         logger.info("  Notion page: %s", page_id)
