@@ -66,6 +66,7 @@ class Settings(BaseSettings):
     # --- Notion ---
     notion_token: str = ""             # Notion Integration Secret (ntn_xxx)
     notion_report_db_id: str = ""      # Database ID for daily CEO report
+    notion_customer_db_id: str = ""    # Database ID for per-customer profiles
 
     # --- Notifications ---
     feishu_webhook_url: str = ""       # Feishu group bot webhook for daily reminders

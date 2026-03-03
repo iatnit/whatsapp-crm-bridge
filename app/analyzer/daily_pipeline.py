@@ -371,6 +371,21 @@ async def run_daily_pipeline() -> dict:
                 except Exception as e:
                     logger.error("HubSpot deal creation error for %s: %s", customer_name, e)
 
+            # Notion customer profile upsert
+            if settings.notion_token and settings.notion_customer_db_id:
+                try:
+                    from app.writers.notion_customer_writer import upsert_customer_profile
+                    total_msgs = conv.get("total_messages", 0) or len(msgs)
+                    await upsert_customer_profile(
+                        customer_name=feishu_name,
+                        phone=phone,
+                        location=location,
+                        analysis=analysis,
+                        total_messages=total_msgs,
+                    )
+                except Exception as e:
+                    logger.warning("Notion customer profile failed for %s: %s", customer_name, e)
+
             # P1b: Store intent tags in conversations table
             tags = analysis.get("tags", [])
             priority = "medium"
