@@ -238,8 +238,7 @@ def _build_properties(
         props["地区"] = {"rich_text": [{"text": {"content": location}}]}
     if products:
         props["产品兴趣"] = {"rich_text": [{"text": {"content": ", ".join(products)}}]}
-    if stage:
-        props["客户阶段"] = {"rich_text": [{"text": {"content": stage}}]}
+    # 客户阶段 is included in the AI block body; skip as DB property to avoid missing-column errors
     if total_messages:
         props["消息数"] = {"number": total_messages}
     props["最后联系"] = {"date": {"start": datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d")}}
