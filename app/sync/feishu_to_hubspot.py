@@ -14,6 +14,7 @@ Flow per record:
 import json
 import logging
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
@@ -68,18 +69,20 @@ async def _fetch_new_followups(since_ms: int) -> list[dict]:
         f"/tables/{settings.feishu_table_followup}/records/search"
     )
 
-    # Try server-side filter on _createdAt (numeric ms field, supports isGreater)
+    # Try server-side filter on 跟进时间 using isAfter with ExactDate format
     # Falls back to full scan + client-side filter if unsupported
     base_payload: dict = {"automatic_fields": True, "page_size": 100}
     if since_ms > 0:
+        since_date = datetime.fromtimestamp(since_ms / 1000, tz=timezone.utc).strftime("%Y-%m-%d")
         base_payload["filter"] = {
             "conjunction": "and",
             "conditions": [{
-                "field_name": "_createdAt",
-                "operator": "isGreater",
-                "value": [str(since_ms)],
+                "field_name": "跟进时间",
+                "operator": "isAfter",
+                "value": ["ExactDate", since_date],
             }],
         }
+        logger.info("Feishu filter: 跟进时间 isAfter %s", since_date)
 
     all_items: list[dict] = []
     page_token = ""
