@@ -66,9 +66,11 @@ async def _fetch_new_followups(since_ms: int) -> list[dict]:
     payload: dict = {
         "automatic_fields": True,
         "page_size": 100,
+        # Sort descending so we can stop early once records are older than watermark
+        "sort": [{"field_name": "跟进时间", "desc": True}],
     }
 
-    all_items = []
+    results = []
     page_token = ""
 
     async with httpx.AsyncClient(timeout=20) as client:
@@ -78,20 +80,41 @@ async def _fetch_new_followups(since_ms: int) -> list[dict]:
             resp = await client.post(url, json=payload, headers=headers)
             data = resp.json()
             if data.get("code") != 0:
-                logger.error("Feishu followup search error: %s", data.get("msg"))
+                logger.warning("Feishu followup sort unsupported, retrying without sort: %s", data.get("msg"))
+                payload.pop("sort", None)
+                payload.pop("page_token", None)
+                page_token = ""
+                # Fallback: fetch all pages without sort, filter client-side
+                all_items = []
+                while True:
+                    if page_token:
+                        payload["page_token"] = page_token
+                    resp2 = await client.post(url, json=payload, headers=headers)
+                    data2 = resp2.json()
+                    if data2.get("code") != 0:
+                        logger.error("Feishu followup search error: %s", data2.get("msg"))
+                        break
+                    for item in data2.get("data", {}).get("items", []):
+                        ts = int(item.get("fields", {}).get("跟进时间") or 0)
+                        if ts > since_ms:
+                            all_items.append(item)
+                    if not data2.get("data", {}).get("has_more"):
+                        break
+                    page_token = data2.get("data", {}).get("page_token", "")
+                results = all_items
                 break
-            items = data.get("data", {}).get("items", [])
-            all_items.extend(items)
-            if not data.get("data", {}).get("has_more"):
+
+            stop_early = False
+            for item in data.get("data", {}).get("items", []):
+                ts = int(item.get("fields", {}).get("跟进时间") or 0)
+                if ts > since_ms:
+                    results.append(item)
+                else:
+                    stop_early = True  # sorted desc: everything after is older
+
+            if stop_early or not data.get("data", {}).get("has_more"):
                 break
             page_token = data.get("data", {}).get("page_token", "")
-
-    # Filter client-side by 跟进时间 > since_ms
-    results = []
-    for item in all_items:
-        ts = int(item.get("fields", {}).get("跟进时间") or 0)
-        if ts > since_ms:
-            results.append(item)
 
     logger.info("Feishu: fetched %d followup records since %d", len(results), since_ms)
     return results
