@@ -133,16 +133,17 @@ async def lifespan(app: FastAPI):
         )
         logger.info("Outbound sync enabled: polling WATI every 5 minutes")
 
-    # Feishu 跟进记录 → HubSpot Notes sync (every 30 min)
+    # Feishu 跟进记录 → HubSpot Notes sync (every 4 hours)
+    # Table has 16k+ records; full scan takes ~3 min (no server-side date filter support)
     if settings.hubspot_enabled and settings.feishu_app_token:
         from app.sync.feishu_to_hubspot import sync_feishu_to_hubspot
         scheduler.add_job(
             sync_feishu_to_hubspot,
             "interval",
-            minutes=30,
+            hours=4,
             id="feishu_hs_sync",
         )
-        logger.info("Feishu→HubSpot sync enabled: every 30 minutes")
+        logger.info("Feishu→HubSpot sync enabled: every 4 hours")
 
     # Morning follow-up reminder (CST timezone)
     if settings.feishu_webhook_url:
