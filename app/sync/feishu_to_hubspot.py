@@ -148,6 +148,13 @@ async def sync_feishu_to_hubspot() -> int:
     since_ms = state.get("last_sync_ms", 0)
     synced_ids: set = set(state.get("synced_ids", []))
 
+    # First run: initialise watermark to 7 days ago to avoid full history backfill
+    if since_ms == 0:
+        since_ms = int((time.time() - 7 * 86400) * 1000)
+        state["last_sync_ms"] = since_ms
+        _save_state(state)
+        logger.info("First run: watermark initialised to 7 days ago (%d)", since_ms)
+
     records = await _fetch_new_followups(since_ms)
     if not records:
         return 0

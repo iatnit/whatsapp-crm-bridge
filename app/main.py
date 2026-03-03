@@ -265,10 +265,11 @@ async def manual_trigger():
 
 @app.post("/api/v1/feishu-hs-sync/trigger", dependencies=[Depends(verify_admin)])
 async def manual_feishu_hs_sync():
-    """Manually trigger Feishu 跟进记录 → HubSpot Notes sync."""
+    """Manually trigger Feishu 跟进记录 → HubSpot Notes sync (runs in background)."""
+    import asyncio
     from app.sync.feishu_to_hubspot import sync_feishu_to_hubspot
-    created = await sync_feishu_to_hubspot()
-    return {"status": "ok", "notes_created": created}
+    asyncio.create_task(sync_feishu_to_hubspot())
+    return {"status": "started", "message": "Sync running in background, check logs for progress"}
 
 
 @app.post("/api/v1/reminder/trigger", dependencies=[Depends(verify_admin)])
