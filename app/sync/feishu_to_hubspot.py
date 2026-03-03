@@ -11,6 +11,7 @@ Flow per record:
   5. Advance watermark
 """
 
+import asyncio
 import json
 import logging
 import time
@@ -78,7 +79,16 @@ async def _fetch_new_followups(since_ms: int) -> list[dict]:
             payload: dict = {"page_size": 500}
             if page_token:
                 payload["page_token"] = page_token
-            resp = await client.post(url, json=payload, headers=headers)
+            # Retry up to 3 times on transient network errors
+            for attempt in range(3):
+                try:
+                    resp = await client.post(url, json=payload, headers=headers)
+                    break
+                except (httpx.ReadError, httpx.ConnectError, httpx.TimeoutException) as e:
+                    if attempt == 2:
+                        raise
+                    logger.warning("Feishu request failed (attempt %d/3): %s — retrying", attempt + 1, e)
+                    await asyncio.sleep(3 * (attempt + 1))
             data = resp.json()
             if data.get("code") != 0:
                 logger.error("Feishu followup search error: %s", data.get("msg"))
@@ -141,6 +151,14 @@ async def sync_feishu_to_hubspot() -> int:
 
     Returns count of notes created.
     """
+    try:
+        return await _sync_feishu_to_hubspot_inner()
+    except Exception as e:
+        logger.error("Feishu→HubSpot sync failed: %s", e, exc_info=True)
+        return 0
+
+
+async def _sync_feishu_to_hubspot_inner() -> int:
     if not settings.hubspot_enabled or not settings.hubspot_access_token:
         return 0
     if not settings.feishu_app_token:
