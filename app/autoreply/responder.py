@@ -146,10 +146,29 @@ def _format_customer_context(ctx: dict) -> str:
     stage = ctx["relationship_stage"]
     total = ctx["total_messages"]
     days = ctx["first_seen_days"]
+    tier = ctx.get("customer_tier", "")
+    product_interest = ctx.get("product_interest", "")
 
     lines = [f"CUSTOMER CONTEXT: stage={stage}, messages={total}, days={days}"]
     if ctx["is_known"] and ctx["customer_name"]:
         lines.append(f"CRM name: {ctx['customer_name']} (known customer)")
+
+    # Tier context — affects how attentive and proactive Lucky should be
+    if tier == "S":
+        lines.append("Tier: S ⭐⭐⭐⭐⭐ — TOP customer (highest revenue). Be extra responsive and warm. Prioritize this conversation.")
+    elif tier == "A":
+        lines.append("Tier: A ⭐⭐⭐⭐ — Key account. Important customer, treat with care.")
+    elif tier == "B":
+        lines.append("Tier: B ⭐⭐⭐ — Good regular customer.")
+    elif tier in ("C", "D"):
+        lines.append(f"Tier: {tier} — Smaller customer. Refer to local agent if quantity is below MOQ.")
+
+    # Product interest from CRM
+    if product_interest:
+        products = product_interest.replace(";", ", ")
+        lines.append(f"Known product interest: {products}")
+
+    # Relationship guidance
     if stage == "new":
         lines.append("→ First contact. OK to ask basic questions (product, shop/factory).")
     elif stage == "early":

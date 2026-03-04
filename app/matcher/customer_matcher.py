@@ -33,7 +33,7 @@ def load_customers() -> dict[str, str]:
     return _customer_db
 
 
-def search_customer(name: str, threshold: float = 0.6) -> list[tuple[str, str, float]]:
+def search_customer(name: str, threshold: float = 0.75) -> list[tuple[str, str, float]]:
     """Search for a customer by name.
 
     Returns list of (customer_id, customer_name, score) sorted by score desc.
@@ -81,7 +81,7 @@ async def match_conversation(phone: str, display_name: str) -> dict | None:
         return None
 
     best_id, best_name, score = matches[0]
-    if score < 0.6:
+    if score < 0.75:
         return None
 
     await update_customer_match(phone, best_id, best_name, "matched")

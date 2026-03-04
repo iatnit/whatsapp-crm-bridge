@@ -368,6 +368,12 @@ async def run_daily_pipeline() -> dict:
                         phone, name=feishu_name, country=location, extra=hs_extra)
                     if hs_contact_id:
                         await update_hubspot_id(phone, hs_contact_id)
+                        # Cache HubSpot enrichment locally for AI auto-reply context
+                        from app.store.conversations import update_crm_enrichment
+                        hs_tier = hs_extra.get("customer_tier", "")
+                        hs_products = hs_extra.get("product_interest", "")
+                        if hs_tier or hs_products:
+                            await update_crm_enrichment(phone, tier=hs_tier, product_interest=hs_products)
                         hs_note_id = await hubspot_ensure_note(
                             hs_contact_id, phone,
                             title=analysis.get("followup_title", "WhatsApp沟通"),
@@ -476,6 +482,9 @@ async def run_daily_pipeline() -> dict:
         analyzed_count += 1
         if r.get("feishu_written"):
             written_count += 1
+
+    # Sort results alphabetically by customer_name for deterministic output
+    results.sort(key=lambda r: (r.get("customer_name") or "").lower())
 
     # Persist remaining cached analyses (only for phones that failed)
     _save_analysis_cache(analysis_cache)

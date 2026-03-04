@@ -10,6 +10,7 @@ from fastapi import APIRouter, Request
 from app.webhook.media import download_media
 from app.store.messages import save_message, update_conversation
 from app.autoreply.responder import handle_auto_reply, notify_outbound
+from app.utils.phone import normalize_phone
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1")
@@ -157,7 +158,7 @@ async def receive_webhook(request: Request):
         return {"status": "ignored"}
 
     wa_message_id = payload.get("whatsappMessageId", "") or payload.get("id", "")
-    phone = payload.get("waId", "")
+    phone = normalize_phone(payload.get("waId", ""))  # normalize at entry point
     display_name = payload.get("senderName", "")
     is_outbound = payload.get("owner", False)
     direction = "outbound" if is_outbound else "inbound"

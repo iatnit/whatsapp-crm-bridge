@@ -104,6 +104,25 @@ async def download_media(
 
         # Determine extension from Content-Type or URL
         content_type = resp.headers.get("content-type", "")
+
+        # MIME type whitelist — reject unexpected content types to prevent
+        # saving HTML error pages, JavaScript, or executable files as media
+        _ALLOWED_MIME_PREFIXES = (
+            "image/", "audio/", "video/",
+            "application/pdf",
+            "application/vnd.openxmlformats-officedocument",
+            "application/vnd.ms-",
+            "application/msword",
+            "application/zip",
+            "application/octet-stream",
+        )
+        mime_base = content_type.split(";")[0].strip().lower()
+        if mime_base and not any(mime_base.startswith(p) for p in _ALLOWED_MIME_PREFIXES):
+            logger.warning(
+                "Rejected media download for %s: unexpected MIME type '%s'",
+                message_id, mime_base,
+            )
+            return None
         ext = _ext_from_mime(content_type) or _ext_from_url(url) or ".bin"
 
         # Build filename: {customer}-{YYYYMMDD}-{seq}.{ext}

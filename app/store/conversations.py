@@ -84,6 +84,31 @@ async def update_hubspot_id(phone: str, hubspot_contact_id: str) -> None:
         await db.commit()
 
 
+async def update_crm_enrichment(
+    phone: str,
+    tier: str = "",
+    product_interest: str = "",
+) -> None:
+    """Cache HubSpot enrichment data locally for fast AI context lookup.
+
+    Called by the daily pipeline after syncing HubSpot contact properties.
+    Only updates non-empty values so partial updates don't wipe existing data.
+    """
+    async with get_db() as db:
+        if tier:
+            await db.execute(
+                "UPDATE conversations SET customer_tier = ? WHERE phone = ?",
+                (tier, phone),
+            )
+        if product_interest:
+            await db.execute(
+                "UPDATE conversations SET product_interest = ? WHERE phone = ?",
+                (product_interest, phone),
+            )
+        if tier or product_interest:
+            await db.commit()
+
+
 async def get_sync_status() -> dict:
     """Get cross-system CRM sync status for all conversations.
 
@@ -251,12 +276,13 @@ async def get_customer_context(phone: str) -> dict:
     """Build customer context from local SQLite data (zero API calls).
 
     Returns a dict with:
-      is_known, customer_name, relationship_stage, total_messages, first_seen_days
+      is_known, customer_name, relationship_stage, total_messages, first_seen_days,
+      customer_tier, product_interest
     """
     async with get_db() as db:
-        # Conversation-level data
         cursor = await db.execute(
-            "SELECT customer_name, match_status, total_messages, first_message_at "
+            "SELECT customer_name, match_status, total_messages, first_message_at, "
+            "customer_tier, product_interest "
             "FROM conversations WHERE phone = ?",
             (phone,),
         )
@@ -269,13 +295,14 @@ async def get_customer_context(phone: str) -> dict:
                 "relationship_stage": "new",
                 "total_messages": 0,
                 "first_seen_days": 0,
+                "customer_tier": "",
+                "product_interest": "",
             }
 
         total = conv["total_messages"] or 0
         customer_name = conv["customer_name"] or ""
         is_known = conv["match_status"] == "matched" and bool(customer_name)
 
-        # Calculate days since first contact
         first_ts = _parse_first_message_ts(conv["first_message_at"])
         first_seen_days = max(0, int((time.time() - first_ts) / 86400)) if first_ts else 0
 
@@ -287,4 +314,6 @@ async def get_customer_context(phone: str) -> dict:
             "relationship_stage": stage,
             "total_messages": total,
             "first_seen_days": first_seen_days,
+            "customer_tier": conv["customer_tier"] or "",
+            "product_interest": conv["product_interest"] or "",
         }

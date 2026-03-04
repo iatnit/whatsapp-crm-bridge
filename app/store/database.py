@@ -84,6 +84,13 @@ MIGRATIONS = [
     """
     ALTER TABLE conversations ADD COLUMN intent_tags TEXT DEFAULT '';
     """,
+    # HubSpot enrichment cache — tier and product interest for AI context
+    """
+    ALTER TABLE conversations ADD COLUMN customer_tier TEXT DEFAULT '';
+    """,
+    """
+    ALTER TABLE conversations ADD COLUMN product_interest TEXT DEFAULT '';
+    """,
     # P1a: Customer actions table for daily reminders
     """
     CREATE TABLE IF NOT EXISTS customer_actions (
