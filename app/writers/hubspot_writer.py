@@ -79,6 +79,11 @@ def clear_contact_cache():
     _deal_cache.clear()
 
 
+def get_contact_stage(contact_id: str) -> str:
+    """Return the cached customer_stage for a contact (empty string if unknown)."""
+    return _stage_cache.get(contact_id, "")
+
+
 # ── Contact operations ───────────────────────────────────────────────
 
 async def search_contact_by_phone(phone: str) -> str | None:
@@ -335,10 +340,27 @@ def build_hubspot_properties(
     Returns a dict of HubSpot property name → value ready for API write.
     Only includes properties that have meaningful values.
     """
+    # Generic/meaningless names to reject (WhatsApp greetings stored as display names)
+    _BAD_NAMES = {
+        "hii", "hi", "hello", "ok", "okay", "yes", "no", "dear", "sir",
+        "madam", "ma'am", "hey", "bro", "friend", "good", "morning",
+        "evening", "night", "afternoon", "there", "guys", "team", "loca",
+        "lucky", "kevin", "thanks", "thank", "welcome", "please", "sorry",
+    }
+
     props: dict = {}
     customer_info = analysis.get("customer_info", {})
     crm_fields = analysis.get("crm_fields", {})
     tags = analysis.get("tags", [])
+
+    # ── Contact name from LLM analysis (fix "hii"/"hello" display names) ──
+    extracted_name = customer_info.get("name", "").strip()
+    if (extracted_name
+            and extracted_name.lower() not in _BAD_NAMES
+            and not extracted_name.replace("+", "").replace(" ", "").isdigit()
+            and len(extracted_name) >= 2
+            and len(extracted_name) <= 60):
+        props["firstname"] = extracted_name
 
     # ── Product interest (from recommended_codes) ──
     codes = analysis.get("recommended_codes", [])

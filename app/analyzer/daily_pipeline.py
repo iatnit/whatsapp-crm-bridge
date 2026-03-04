@@ -400,8 +400,13 @@ async def run_daily_pipeline() -> dict:
                     )
                     if deal_id:
                         logger.info("HubSpot deal created: %s for %s", deal_id, feishu_name)
-                        from app.writers.hubspot_writer import update_contact
-                        await update_contact(hs_contact_id, extra={"customer_stage": "ordered"})
+                        from app.writers.hubspot_writer import update_contact, get_contact_stage
+                        # If already 'ordered' before this run → repeat buyer
+                        prev_stage = get_contact_stage(hs_contact_id)
+                        new_stage = "repeat_buyer" if prev_stage == "ordered" else "ordered"
+                        await update_contact(hs_contact_id, extra={"customer_stage": new_stage})
+                        if new_stage == "repeat_buyer":
+                            logger.info("Repeat buyer detected: %s (%s)", feishu_name, phone)
                 except Exception as e:
                     logger.error("HubSpot deal creation error for %s: %s", customer_name, e)
 
@@ -510,4 +515,15 @@ async def run_daily_pipeline() -> dict:
         "=== Pipeline done: %d conversations, %d analyzed, %d written, %d errors ===",
         len(grouped), analyzed_count, written_count, len(errors),
     )
+
+    # Fire-and-forget alerts (non-blocking)
+    try:
+        from app.notifier.daily_reminder import send_hot_leads_alert, send_pipeline_error_alert
+        if results:
+            asyncio.create_task(send_hot_leads_alert(results))
+        if errors:
+            asyncio.create_task(send_pipeline_error_alert(errors, analyzed_count))
+    except Exception as e:
+        logger.warning("Failed to send pipeline alerts: %s", e)
+
     return summary

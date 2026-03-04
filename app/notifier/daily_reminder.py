@@ -124,6 +124,71 @@ def _build_sync_content(sync: dict) -> list[list[dict]]:
     return lines
 
 
+async def send_hot_leads_alert(results: list[dict]) -> bool:
+    """Send immediate Feishu alert for high-priority leads after pipeline run.
+
+    Filters results with priority=high, sorted by tier (S/A first).
+    Only fires if there are actionable hot leads with today/tomorrow actions.
+    """
+    if not settings.feishu_webhook_url:
+        return False
+
+    hot = [
+        r for r in results
+        if r.get("analysis", {}).get("tags") and
+        any("priority/high" in t for t in r["analysis"].get("tags", []))
+    ]
+    if not hot:
+        return False
+
+    # Sort: S/A tier first, then alphabetically
+    tier_order = {"S": 0, "A": 1, "B": 2, "C": 3, "D": 4, "": 5}
+    def _sort_key(r):
+        ctx = r.get("analysis", {}).get("crm_fields", {})
+        tier = r.get("customer_tier", "")
+        return (tier_order.get(tier, 5), r.get("customer_name", ""))
+    hot.sort(key=_sort_key)
+
+    lines: list[list[dict]] = []
+    lines.append([{"tag": "text", "text": f"🚨 {len(hot)} 个热线索需要立即跟进\n"}])
+
+    for r in hot[:10]:  # cap at 10 to avoid flooding
+        name = r.get("customer_name") or r.get("phone", "?")
+        analysis = r.get("analysis", {})
+        summary = analysis.get("summary", "")
+        next_actions = analysis.get("next_actions", {})
+        today_action = next_actions.get("today", "") if isinstance(next_actions, dict) else ""
+        tier = r.get("customer_tier", "")
+        tier_label = f" [{tier}]" if tier else ""
+
+        lines.append([{"tag": "text", "text": f"  • {name}{tier_label}: {summary}"}])
+        if today_action:
+            lines.append([{"tag": "text", "text": f"    → 今天: {today_action}"}])
+
+    cst = timezone(timedelta(hours=8))
+    now_str = datetime.now(cst).strftime("%H:%M")
+    title = f"🚨 热线索预警 — {now_str}"
+    return await _send_feishu_webhook(title, lines)
+
+
+async def send_pipeline_error_alert(errors: list[str], analyzed: int) -> bool:
+    """Send Feishu alert when pipeline encounters significant errors."""
+    if not settings.feishu_webhook_url:
+        return False
+    if not errors:
+        return False
+
+    lines: list[list[dict]] = [
+        [{"tag": "text", "text": f"Pipeline 处理 {analyzed} 个客户，遇到 {len(errors)} 个错误：\n"}],
+    ]
+    for e in errors[:5]:  # show first 5 errors
+        lines.append([{"tag": "text", "text": f"  ✗ {str(e)[:120]}"}])
+    if len(errors) > 5:
+        lines.append([{"tag": "text", "text": f"  ...还有 {len(errors) - 5} 个错误"}])
+
+    return await _send_feishu_webhook("⚠️ Pipeline 错误报警", lines)
+
+
 async def send_daily_reminder() -> bool:
     """Build and send the morning follow-up reminder via Feishu webhook.
 
