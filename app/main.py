@@ -407,9 +407,11 @@ tr:hover td{background:#f8fafc}
   <div class="card"><h3>跟进优先级</h3><canvas id="prioChart"></canvas></div>
   <div class="card" style="grid-column:span 2"><canvas id="msgChart"></canvas></div>
   <div class="card" style="grid-column:span 2">
-    <h3>消息最多客户 Top 10</h3>
-    <table><thead><tr><th>客户</th><th>Tier</th><th>消息数</th><th>最后联系</th></tr></thead>
+    <h3>消息最多客户 Top 30</h3>
+    <div style="max-height:520px;overflow-y:auto">
+    <table><thead><tr><th>#</th><th>客户</th><th>手机后5位</th><th>Tier</th><th>城市</th><th>消息数</th><th>最后联系</th></tr></thead>
     <tbody id="topTb"></tbody></table>
+    </div>
   </div>
 </div>
 <p class="ts" id="ts"></p>
@@ -440,9 +442,9 @@ async function load(){
       {label:'发送消息',data:d.msg_7d.map(m=>m.outbound),borderColor:'#10b981',backgroundColor:'rgba(16,185,129,.1)',fill:true,tension:.3}
     ]
   },options:{plugins:{title:{display:true,text:'7天消息量趋势'}},scales:{y:{beginAtZero:true}}}});
-  document.getElementById('topTb').innerHTML=d.top_customers.map(c=>{
+  document.getElementById('topTb').innerHTML=d.top_customers.map((c,i)=>{
     const badge=c.tier?`<span class="badge ${c.tier}">${c.tier}</span>`:'<span style="color:#cbd5e1">-</span>';
-    return `<tr><td>${c.name}</td><td>${badge}</td><td>${c.msgs}</td><td>${c.last_contact||'-'}</td></tr>`;
+    return `<tr><td style="color:#94a3b8">${i+1}</td><td>${c.name}</td><td style="font-family:monospace;color:#64748b">${c.phone_short}</td><td>${badge}</td><td>${c.city||'-'}</td><td>${c.msgs}</td><td>${c.last_contact||'-'}</td></tr>`;
   }).join('');
   document.getElementById('ts').textContent='更新时间: '+new Date().toLocaleString('zh-CN');
 }

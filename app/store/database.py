@@ -91,6 +91,10 @@ MIGRATIONS = [
     """
     ALTER TABLE conversations ADD COLUMN product_interest TEXT DEFAULT '';
     """,
+    # Cache location (country/city) from AI analysis
+    """
+    ALTER TABLE conversations ADD COLUMN location TEXT DEFAULT '';
+    """,
     # P1a: Customer actions table for daily reminders
     """
     CREATE TABLE IF NOT EXISTS customer_actions (

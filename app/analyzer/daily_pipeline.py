@@ -267,6 +267,11 @@ async def run_daily_pipeline() -> dict:
             feishu_name = matched_name or claude_name or display_name or phone
             location = analysis.get("customer_info", {}).get("location", "")
 
+            # Cache location to SQLite
+            if location:
+                from app.store.conversations import update_location
+                await update_location(phone, location)
+
             # Write to Feishu
             feishu_ok = False
             record_id = None

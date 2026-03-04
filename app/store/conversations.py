@@ -84,6 +84,18 @@ async def update_hubspot_id(phone: str, hubspot_contact_id: str) -> None:
         await db.commit()
 
 
+async def update_location(phone: str, location: str) -> None:
+    """Cache location (country/city) extracted by AI into conversations table."""
+    if not location:
+        return
+    async with get_db() as db:
+        await db.execute(
+            "UPDATE conversations SET location = ? WHERE phone = ? AND (location = '' OR location IS NULL)",
+            (location, phone),
+        )
+        await db.commit()
+
+
 async def update_crm_enrichment(
     phone: str,
     tier: str = "",
@@ -391,19 +403,21 @@ async def get_overview_stats() -> dict:
                 "outbound": next((r[0] for r in rows if r[1] == "outbound"), 0),
             })
 
-        # Top 10 customers by total_messages
+        # Top 30 customers by total_messages
         cursor = await db.execute(
-            "SELECT phone, display_name, total_messages, customer_tier, last_message_at "
-            "FROM conversations ORDER BY total_messages DESC LIMIT 10"
+            "SELECT phone, display_name, total_messages, customer_tier, last_message_at, location "
+            "FROM conversations ORDER BY total_messages DESC LIMIT 30"
         )
         top_rows = await cursor.fetchall()
         top_customers = [
             {
                 "phone": r[0],
+                "phone_short": r[0][-5:] if r[0] else "",
                 "name": r[1] or r[0],
                 "msgs": r[2] or 0,
                 "tier": r[3] or "",
                 "last_contact": r[4][:10] if r[4] else "",
+                "city": r[5] or "",
             }
             for r in top_rows
         ]
