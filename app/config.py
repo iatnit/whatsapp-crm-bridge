@@ -72,6 +72,8 @@ class Settings(BaseSettings):
     feishu_webhook_url: str = ""       # Feishu group bot webhook for daily reminders
     reminder_hour: int = 9             # daily reminder time (CST hour, 0-23)
     reminder_minute: int = 0
+    dormant_outreach_days: int = 30    # inactivity threshold for dormant outreach
+    dormant_outreach_interval_days: int = 15  # run dormant outreach every N days (0 = disabled)
 
     # --- App ---
     log_level: str = "INFO"

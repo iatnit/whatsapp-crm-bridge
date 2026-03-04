@@ -148,6 +148,26 @@ async def lifespan(app: FastAPI):
         )
         logger.info("Feishu→HubSpot sync enabled: every 4 hours")
 
+    # Bi-monthly dormant customer outreach (every 15 days by default)
+    if settings.feishu_webhook_url and settings.dormant_outreach_interval_days > 0:
+        async def _run_dormant_outreach():
+            try:
+                from scripts.dormant_customers import run as dormant_run
+                await dormant_run(days=settings.dormant_outreach_days, dry_run=False)
+            except Exception:
+                logger.exception("Dormant outreach failed")
+
+        scheduler.add_job(
+            _run_dormant_outreach,
+            "interval",
+            days=settings.dormant_outreach_interval_days,
+            id="dormant_outreach",
+        )
+        logger.info(
+            "Dormant outreach enabled: every %d days (inactive threshold: %d days)",
+            settings.dormant_outreach_interval_days, settings.dormant_outreach_days,
+        )
+
     # Morning follow-up reminder (CST timezone)
     if settings.feishu_webhook_url:
         from app.notifier.daily_reminder import send_daily_reminder
@@ -284,6 +304,19 @@ async def manual_reminder():
     from app.notifier.daily_reminder import send_daily_reminder
     sent = await send_daily_reminder()
     return {"sent": sent}
+
+
+@app.post("/api/v1/dormant/trigger", dependencies=[Depends(verify_admin)])
+async def manual_dormant_outreach(days: int = 30):
+    """Manually trigger dormant customer outreach report to Feishu."""
+    import asyncio
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from scripts.dormant_customers import run as dormant_run
+    task = asyncio.create_task(dormant_run(days=days, dry_run=False))
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+    return {"status": "started", "days": days}
 
 
 @app.get("/api/v1/stats")
