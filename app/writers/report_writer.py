@@ -16,7 +16,11 @@ async def _get_unmatched_list() -> list[dict]:
     return await get_unmatched_conversations()
 
 
-def generate_daily_report(summary: dict, unmatched: list[dict] | None = None) -> str:
+def generate_daily_report(
+    summary: dict,
+    unmatched: list[dict] | None = None,
+    overview: dict | None = None,
+) -> str:
     """Format the pipeline summary into a readable daily report.
 
     Returns a Markdown string suitable for logging, Feishu, or other output.
@@ -42,6 +46,30 @@ def generate_daily_report(summary: dict, unmatched: list[dict] | None = None) ->
         f"- 新匹配客户: {new_matches}",
         "",
     ]
+
+    # Business overview from aggregated stats
+    if overview:
+        lines.append("## 业务概览")
+        lines.append(
+            f"- 总客户: {overview['total_customers']} | "
+            f"7天活跃: {overview['active_7d']} | "
+            f"本周新增: {overview['new_7d']} | "
+            f"热线索: {overview['hot_leads']}"
+        )
+        tiers = overview.get("tiers", [])
+        if tiers:
+            tier_parts = " | ".join(
+                f"{t['tier']}:{t['count']}" for t in tiers if t["count"] > 0
+            )
+            lines.append(f"- Tier分布: {tier_parts}")
+        prios = {p["priority"]: p["count"] for p in overview.get("priorities", [])}
+        if prios:
+            lines.append(
+                f"- 优先级: 高({prios.get('high', 0)}) | "
+                f"中({prios.get('medium', 0)}) | "
+                f"低({prios.get('normal', prios.get('low', 0))})"
+            )
+        lines.append("")
 
     # Per-customer details
     results = summary.get("results", [])

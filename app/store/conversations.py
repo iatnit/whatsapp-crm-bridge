@@ -1,7 +1,7 @@
 """Conversation-level queries and customer matching updates."""
 
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from app.store.database import get_db
 
@@ -317,3 +317,104 @@ async def get_customer_context(phone: str) -> dict:
             "customer_tier": conv["customer_tier"] or "",
             "product_interest": conv["product_interest"] or "",
         }
+
+
+async def get_overview_stats() -> dict:
+    """Return aggregated CRM stats for reports and dashboard (SQLite only, no API calls).
+
+    Includes: total customers, active/new last 7 days, hot leads today,
+    tier distribution, priority distribution, 7-day message volume, top 10 customers.
+    """
+    cst = timezone(timedelta(hours=8))
+    now = datetime.now(cst)
+    ts_7d_ago = int((now - timedelta(days=7)).timestamp())
+    today_str = now.strftime("%Y-%m-%d")
+    week_start_str = (now - timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
+
+    async with get_db() as db:
+        cursor = await db.execute("SELECT COUNT(*) FROM conversations")
+        total = (await cursor.fetchone())[0]
+
+        cursor = await db.execute(
+            "SELECT COUNT(DISTINCT phone) FROM messages WHERE timestamp >= ?",
+            (ts_7d_ago,),
+        )
+        active_7d = (await cursor.fetchone())[0]
+
+        cursor = await db.execute(
+            "SELECT COUNT(*) FROM conversations WHERE first_message_at >= ?",
+            (week_start_str,),
+        )
+        new_7d = (await cursor.fetchone())[0]
+
+        cursor = await db.execute(
+            "SELECT COUNT(*) FROM customer_actions WHERE action_date = ? AND priority = 'high'",
+            (today_str,),
+        )
+        hot_leads = (await cursor.fetchone())[0]
+
+        # Tier distribution
+        cursor = await db.execute(
+            "SELECT COALESCE(customer_tier, '') as tier, COUNT(*) as cnt "
+            "FROM conversations GROUP BY tier ORDER BY tier"
+        )
+        tier_rows = await cursor.fetchall()
+        tiers = [{"tier": r[0] or "未设置", "count": r[1]} for r in tier_rows]
+
+        # Priority distribution from each customer's most recent action
+        cursor = await db.execute("""
+            SELECT ca.priority, COUNT(*)
+            FROM customer_actions ca
+            WHERE ca.action_date = (
+                SELECT MAX(action_date) FROM customer_actions WHERE phone = ca.phone
+            )
+            GROUP BY ca.priority
+        """)
+        prio_rows = await cursor.fetchall()
+        priorities = [{"priority": r[0] or "normal", "count": r[1]} for r in prio_rows]
+
+        # 7-day message volume by day
+        msg_7d = []
+        for i in range(6, -1, -1):
+            day = now - timedelta(days=i)
+            day_start = int(day.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
+            day_end = int(day.replace(hour=23, minute=59, second=59, microsecond=0).timestamp())
+            cursor = await db.execute(
+                "SELECT COUNT(*), direction FROM messages "
+                "WHERE timestamp >= ? AND timestamp <= ? GROUP BY direction",
+                (day_start, day_end),
+            )
+            rows = await cursor.fetchall()
+            msg_7d.append({
+                "date": day.strftime("%m/%d"),
+                "inbound": next((r[0] for r in rows if r[1] == "inbound"), 0),
+                "outbound": next((r[0] for r in rows if r[1] == "outbound"), 0),
+            })
+
+        # Top 10 customers by total_messages
+        cursor = await db.execute(
+            "SELECT phone, display_name, total_messages, customer_tier, last_message_at "
+            "FROM conversations ORDER BY total_messages DESC LIMIT 10"
+        )
+        top_rows = await cursor.fetchall()
+        top_customers = [
+            {
+                "phone": r[0],
+                "name": r[1] or r[0],
+                "msgs": r[2] or 0,
+                "tier": r[3] or "",
+                "last_contact": r[4][:10] if r[4] else "",
+            }
+            for r in top_rows
+        ]
+
+    return {
+        "total_customers": total,
+        "active_7d": active_7d,
+        "new_7d": new_7d,
+        "hot_leads": hot_leads,
+        "tiers": tiers,
+        "priorities": priorities,
+        "msg_7d": msg_7d,
+        "top_customers": top_customers,
+    }

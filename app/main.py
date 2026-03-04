@@ -68,9 +68,10 @@ async def scheduled_daily_analysis():
     logger.info("Scheduled daily analysis triggered")
     try:
         summary = await run_daily_pipeline()
-        from app.store.conversations import get_unmatched_conversations
+        from app.store.conversations import get_unmatched_conversations, get_overview_stats
         unmatched = await get_unmatched_conversations()
-        report = generate_daily_report(summary, unmatched=unmatched)
+        overview = await get_overview_stats()
+        report = generate_daily_report(summary, unmatched=unmatched, overview=overview)
         logger.info("Daily report:\n%s", report)
         _last_pipeline_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         _last_pipeline_ok = not summary.get("errors")
@@ -282,9 +283,10 @@ async def health():
 async def manual_trigger():
     """Manually trigger the daily analysis pipeline (for testing)."""
     summary = await run_daily_pipeline()
-    from app.store.conversations import get_unmatched_conversations
+    from app.store.conversations import get_unmatched_conversations, get_overview_stats
     unmatched = await get_unmatched_conversations()
-    report = generate_daily_report(summary, unmatched=unmatched)
+    overview = await get_overview_stats()
+    report = generate_daily_report(summary, unmatched=unmatched, overview=overview)
     try:
         from app.writers.report_writer import write_report_to_feishu
         await write_report_to_feishu(report, summary)
@@ -367,6 +369,96 @@ async def sync_check():
     """
     from app.store.conversations import get_sync_status
     return await get_sync_status()
+
+
+# ── Customer Dashboard ───────────────────────────────────────────────
+
+_DASHBOARD_HTML = """<!DOCTYPE html>
+<html lang="zh"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CRM 客户看板 — LOCACRYSTAL</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f1f5f9;color:#1e293b;padding:24px}
+h1{font-size:1.5rem;margin-bottom:20px;color:#0f172a}
+h3{font-size:1rem;color:#475569;margin-bottom:12px}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+.kpi{background:#fff;border-radius:12px;padding:20px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.kpi .n{font-size:2.2rem;font-weight:700;color:#2563eb}
+.kpi .l{color:#64748b;font-size:.85rem;margin-top:6px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.card{background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+table{width:100%;border-collapse:collapse;font-size:.875rem}
+th{text-align:left;padding:8px 10px;border-bottom:2px solid #e2e8f0;color:#64748b;font-weight:600}
+td{padding:8px 10px;border-bottom:1px solid #f1f5f9}
+tr:hover td{background:#f8fafc}
+.badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.75rem;font-weight:700}
+.S{background:#fef2f2;color:#dc2626}.A{background:#fffbeb;color:#d97706}
+.B{background:#eff6ff;color:#2563eb}.C{background:#f1f5f9;color:#475569}
+.D{background:#f8fafc;color:#94a3b8}
+.ts{color:#94a3b8;font-size:.75rem;text-align:right;margin-top:16px}
+@media(max-width:768px){.kpis,.grid{grid-template-columns:1fr}}
+</style></head><body>
+<h1>📊 LOCACRYSTAL CRM 客户看板</h1>
+<div class="kpis" id="kpis"></div>
+<div class="grid">
+  <div class="card"><h3>Tier 分布</h3><canvas id="tierChart"></canvas></div>
+  <div class="card"><h3>跟进优先级</h3><canvas id="prioChart"></canvas></div>
+  <div class="card" style="grid-column:span 2"><canvas id="msgChart"></canvas></div>
+  <div class="card" style="grid-column:span 2">
+    <h3>消息最多客户 Top 10</h3>
+    <table><thead><tr><th>客户</th><th>Tier</th><th>消息数</th><th>最后联系</th></tr></thead>
+    <tbody id="topTb"></tbody></table>
+  </div>
+</div>
+<p class="ts" id="ts"></p>
+<script>
+const TIER_COLORS={'S':'#dc2626','A':'#d97706','B':'#2563eb','C':'#94a3b8','D':'#cbd5e1','未设置':'#e2e8f0'};
+const PRIO_COLORS={'high':'#ef4444','medium':'#f59e0b','normal':'#22c55e','low':'#22c55e'};
+const PRIO_LABEL={'high':'高优先','medium':'中优先','normal':'普通','low':'低优先'};
+async function load(){
+  const d=await fetch('/api/v1/dashboard/data').then(r=>r.json());
+  document.getElementById('kpis').innerHTML=[
+    {n:d.total_customers,l:'总客户'},{n:d.active_7d,l:'7天活跃'},
+    {n:d.hot_leads,l:'今日热线索'},{n:d.new_7d,l:'本周新增'}
+  ].map(k=>`<div class="kpi"><div class="n">${k.n}</div><div class="l">${k.l}</div></div>`).join('');
+  new Chart(document.getElementById('tierChart'),{type:'doughnut',data:{
+    labels:d.tiers.map(t=>t.tier),
+    datasets:[{data:d.tiers.map(t=>t.count),backgroundColor:d.tiers.map(t=>TIER_COLORS[t.tier]||'#e2e8f0'),borderWidth:2}]
+  },options:{plugins:{legend:{position:'right'}}}});
+  new Chart(document.getElementById('prioChart'),{type:'doughnut',data:{
+    labels:d.priorities.map(p=>PRIO_LABEL[p.priority]||p.priority),
+    datasets:[{data:d.priorities.map(p=>p.count),backgroundColor:d.priorities.map(p=>PRIO_COLORS[p.priority]||'#94a3b8'),borderWidth:2}]
+  },options:{plugins:{legend:{position:'right'}}}});
+  new Chart(document.getElementById('msgChart'),{type:'line',data:{
+    labels:d.msg_7d.map(m=>m.date),
+    datasets:[
+      {label:'收到消息',data:d.msg_7d.map(m=>m.inbound),borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,.1)',fill:true,tension:.3},
+      {label:'发送消息',data:d.msg_7d.map(m=>m.outbound),borderColor:'#10b981',backgroundColor:'rgba(16,185,129,.1)',fill:true,tension:.3}
+    ]
+  },options:{plugins:{title:{display:true,text:'7天消息量趋势'}},scales:{y:{beginAtZero:true}}}});
+  document.getElementById('topTb').innerHTML=d.top_customers.map(c=>{
+    const badge=c.tier?`<span class="badge ${c.tier}">${c.tier}</span>`:'<span style="color:#cbd5e1">-</span>';
+    return `<tr><td>${c.name}</td><td>${badge}</td><td>${c.msgs}</td><td>${c.last_contact||'-'}</td></tr>`;
+  }).join('');
+  document.getElementById('ts').textContent='更新时间: '+new Date().toLocaleString('zh-CN');
+}
+load();
+</script></body></html>"""
+
+
+@app.get("/dashboard", response_class=HTMLResponse, dependencies=[Depends(verify_admin)])
+async def dashboard():
+    """Customer analytics dashboard."""
+    return HTMLResponse(_DASHBOARD_HTML)
+
+
+@app.get("/api/v1/dashboard/data", dependencies=[Depends(verify_admin)])
+async def dashboard_data():
+    """Return aggregated CRM stats for the dashboard."""
+    from app.store.conversations import get_overview_stats
+    return await get_overview_stats()
 
 
 # ── AI Manager UI & API ─────────────────────────────────────────────
