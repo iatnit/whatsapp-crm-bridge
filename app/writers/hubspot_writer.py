@@ -56,8 +56,9 @@ _STAGE_ORDER = {
     "contacted": 2,
     "qualified": 3,
     "negotiating": 4,
-    "ordered": 5,
-    "repeat_buyer": 6,
+    "sampling": 5,      # samples requested or sent
+    "ordered": 6,
+    "repeat_buyer": 7,
     "dormant": 0,   # can be overridden by any active stage
     "lost": 0,      # can be overridden by any active stage
 }
@@ -385,6 +386,10 @@ def build_hubspot_properties(
     ps = crm_fields.get("price_sensitivity", "unknown")
     if moq is not None or (ps and ps != "unknown"):
         stage = "negotiating"
+
+    # Samples requested or sent → sampling
+    if crm_fields.get("sample_requested"):
+        stage = "sampling"
 
     props["customer_stage"] = stage
 
