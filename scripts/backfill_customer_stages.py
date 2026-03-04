@@ -193,10 +193,13 @@ async def run(dry_run: bool, overwrite_all: bool) -> None:
                 },
             )
             if resp.status_code in (200, 207):
-                batch_results = resp.json().get("results", batch)
-                applied += len(batch_results)
-                logger.info("Batch %d/%d: %d updated", i // 100 + 1,
-                            (len(updates) + 99) // 100, len(batch_results))
+                # HubSpot batch/update returns only a subset in results; count input size
+                num_errors = resp.json().get("numErrors", 0)
+                batch_applied = len(batch) - num_errors
+                applied += batch_applied
+                errors += num_errors
+                logger.info("Batch %d/%d: %d updated, %d errors", i // 100 + 1,
+                            (len(updates) + 99) // 100, batch_applied, num_errors)
             else:
                 errors += len(batch)
                 logger.error("Batch update failed [%d]: %s", resp.status_code, resp.text[:200])
