@@ -418,7 +418,9 @@ const TIER_COLORS={'S':'#dc2626','A':'#d97706','B':'#2563eb','C':'#94a3b8','D':'
 const PRIO_COLORS={'high':'#ef4444','medium':'#f59e0b','normal':'#22c55e','low':'#22c55e'};
 const PRIO_LABEL={'high':'高优先','medium':'中优先','normal':'普通','low':'低优先'};
 async function load(){
-  const d=await fetch('/api/v1/dashboard/data').then(r=>r.json());
+  const token=new URLSearchParams(location.search).get('admin_token')||'';
+  const url='/api/v1/dashboard/data'+(token?'?admin_token='+encodeURIComponent(token):'');
+  const d=await fetch(url).then(r=>r.json());
   document.getElementById('kpis').innerHTML=[
     {n:d.total_customers,l:'总客户'},{n:d.active_7d,l:'7天活跃'},
     {n:d.hot_leads,l:'今日热线索'},{n:d.new_7d,l:'本周新增'}
