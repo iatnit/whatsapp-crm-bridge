@@ -136,6 +136,43 @@ TOOL_DECLARATIONS = [
                     "required": ["name"],
                 },
             },
+            {
+                "name": "add_followup_note",
+                "description": "给客户添加 HubSpot 跟进备注，记录沟通情况、决定、下一步等",
+                "parameters": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "phone": {
+                            "type": "STRING",
+                            "description": "客户手机号（含国家码）",
+                        },
+                        "note": {
+                            "type": "STRING",
+                            "description": "备注内容，如：已寄样品，等待反馈",
+                        },
+                    },
+                    "required": ["phone", "note"],
+                },
+            },
+            {
+                "name": "get_customers_by_stage",
+                "description": "按客户阶段筛选客户，如查询所有正在谈判中、已寄样品的客户",
+                "parameters": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "stage": {
+                            "type": "STRING",
+                            "description": "客户阶段：new_lead / contacted / qualified / negotiating / sampling / ordered / repeat_buyer",
+                        },
+                    },
+                    "required": ["stage"],
+                },
+            },
+            {
+                "name": "get_ai_disabled_list",
+                "description": "查看所有已关闭 AI 自动回复的客户列表",
+                "parameters": {"type": "OBJECT", "properties": {}},
+            },
         ]
     }
 ]
@@ -276,6 +313,87 @@ async def _dispatch(function_name: str, arguments: dict) -> str:
                 lines.append(f"  • {cname} ({phone}) - {msgs}条消息 {ai}")
             if len(matches) > 20:
                 lines.append(f"  ...还有 {len(matches) - 20} 个")
+            return "\n".join(lines)
+
+        elif function_name == "add_followup_note":
+            from app.config import settings
+            phone = arguments.get("phone", "")
+            note = arguments.get("note", "")
+            if not phone or not note:
+                return "错误：缺少 phone 或 note 参数"
+            if not settings.hubspot_enabled:
+                return "HubSpot 未启用，无法添加备注"
+            from app.store.database import get_db
+            async with get_db() as db:
+                cursor = await db.execute(
+                    "SELECT hubspot_contact_id, customer_name, display_name FROM conversations WHERE phone = ?",
+                    (phone,),
+                )
+                row = await cursor.fetchone()
+            if not row or not row["hubspot_contact_id"]:
+                return f"未找到 {phone} 的 HubSpot 联系人"
+            from app.writers.hubspot_writer import hubspot_ensure_note
+            cid = row["hubspot_contact_id"]
+            cname = row["customer_name"] or row["display_name"] or phone
+            note_id = await hubspot_ensure_note(
+                cid, phone,
+                title=f"飞书备注 - {datetime.now(CST).strftime('%Y-%m-%d')}",
+                detail=note,
+                summary=note[:80],
+            )
+            if note_id:
+                return f"✓ 已为 {cname} 添加备注：{note}"
+            return f"备注添加失败（HubSpot 错误）"
+
+        elif function_name == "get_customers_by_stage":
+            stage = arguments.get("stage", "").strip().lower()
+            if not stage:
+                return "错误：缺少 stage 参数"
+            from app.config import settings
+            if not settings.hubspot_enabled:
+                return "HubSpot 未启用，无法按阶段筛选"
+            import httpx
+            headers_hs = {
+                "Authorization": f"Bearer {settings.hubspot_access_token}",
+                "Content-Type": "application/json",
+            }
+            async with httpx.AsyncClient(timeout=20) as client:
+                resp = await client.post(
+                    "https://api.hubapi.com/crm/v3/objects/contacts/search",
+                    headers=headers_hs,
+                    json={
+                        "filterGroups": [{"filters": [
+                            {"propertyName": "customer_stage", "operator": "EQ", "value": stage}
+                        ]}],
+                        "properties": ["firstname", "lastname", "phone", "customer_stage", "customer_tier"],
+                        "limit": 50,
+                    },
+                )
+            if resp.status_code != 200:
+                return f"HubSpot 查询失败 [{resp.status_code}]"
+            results = resp.json().get("results", [])
+            if not results:
+                return f"没有找到阶段为 '{stage}' 的客户"
+            lines = [f"阶段 '{stage}' 的客户（{len(results)} 个）："]
+            for r in results:
+                props = r.get("properties", {})
+                name = f"{props.get('firstname', '')} {props.get('lastname', '')}".strip() or "?"
+                phone_val = props.get("phone", "?")
+                tier = props.get("customer_tier", "")
+                lines.append(f"  • {name} ({phone_val})" + (f" [{tier}]" if tier else ""))
+            if resp.json().get("paging", {}).get("next"):
+                lines.append("  ...（还有更多，最多显示50个）")
+            return "\n".join(lines)
+
+        elif function_name == "get_ai_disabled_list":
+            from app.store.conversations import get_ai_disabled_list
+            items = await get_ai_disabled_list()
+            if not items:
+                return "当前没有关闭 AI 回复的客户"
+            lines = [f"已关闭 AI 自动回复的客户（{len(items)} 个）："]
+            for c in items:
+                name = c.get("customer_name") or c.get("display_name") or "?"
+                lines.append(f"  • {name} ({c['phone']})")
             return "\n".join(lines)
 
         else:
