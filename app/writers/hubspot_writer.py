@@ -362,6 +362,11 @@ def build_hubspot_properties(
             and len(extracted_name) <= 60):
         props["firstname"] = extracted_name
 
+    # ── Company name from LLM analysis ──
+    company = customer_info.get("company", "").strip()
+    if company and len(company) >= 2 and len(company) <= 100:
+        props["company"] = company
+
     # ── Product interest (from recommended_codes) ──
     codes = analysis.get("recommended_codes", [])
     product_prefixes = set()

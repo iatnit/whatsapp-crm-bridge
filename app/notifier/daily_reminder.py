@@ -124,6 +124,79 @@ def _build_sync_content(sync: dict) -> list[list[dict]]:
     return lines
 
 
+async def send_tier_upgrade_suggestion(customer_name: str, phone: str, current_tier: str) -> bool:
+    """Notify Lucky when a repeat buyer has a low tier (C/D) worth upgrading."""
+    if not settings.feishu_webhook_url:
+        return False
+    lines = [
+        [{"tag": "text", "text": f"🔼 复购客户 {customer_name or phone} 再次下单"}],
+        [{"tag": "text", "text": f"  当前 Tier: {current_tier or '未设置'} — 建议评估是否升级"}],
+        [{"tag": "text", "text": f"  电话: {phone}"}],
+    ]
+    return await _send_feishu_webhook("💡 Tier 升级建议", lines)
+
+
+async def send_weekly_report() -> bool:
+    """Build and send weekly summary to Feishu (every Sunday 9am CST)."""
+    if not settings.feishu_webhook_url:
+        return False
+
+    from app.store.database import get_db
+    import time
+
+    cst = timezone(timedelta(hours=8))
+    today = datetime.now(cst)
+    week_start = today - timedelta(days=7)
+    week_start_ts = int(week_start.timestamp())
+    week_label = f"{week_start.strftime('%m/%d')}–{today.strftime('%m/%d')}"
+
+    async with get_db() as db:
+        # Total active conversations
+        cursor = await db.execute("SELECT COUNT(*) FROM conversations")
+        total_convs = (await cursor.fetchone())[0]
+
+        # New customers this week
+        cursor = await db.execute(
+            "SELECT COUNT(*) FROM conversations WHERE first_message_at >= ?",
+            (datetime.fromtimestamp(week_start_ts, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),),
+        )
+        new_customers = (await cursor.fetchone())[0]
+
+        # Messages this week
+        cursor = await db.execute(
+            "SELECT COUNT(*), direction FROM messages WHERE timestamp >= ? GROUP BY direction",
+            (week_start_ts,),
+        )
+        msg_rows = await cursor.fetchall()
+        inbound = next((r[0] for r in msg_rows if r[1] == "inbound"), 0)
+        outbound = next((r[0] for r in msg_rows if r[1] == "outbound"), 0)
+
+        # Hot leads this week
+        cursor = await db.execute(
+            "SELECT COUNT(*) FROM customer_actions WHERE action_date >= ? AND priority = 'high'",
+            (week_start.strftime("%Y-%m-%d"),),
+        )
+        hot_leads = (await cursor.fetchone())[0]
+
+        # Active phones this week (sent or received messages)
+        cursor = await db.execute(
+            "SELECT COUNT(DISTINCT phone) FROM messages WHERE timestamp >= ?",
+            (week_start_ts,),
+        )
+        active_phones = (await cursor.fetchone())[0]
+
+    lines: list[list[dict]] = [
+        [{"tag": "text", "text": f"📊 本周活跃客户: {active_phones} 个"}],
+        [{"tag": "text", "text": f"🆕 新增客户: {new_customers} 个"}],
+        [{"tag": "text", "text": f"💬 消息量: 收 {inbound} 条 / 发 {outbound} 条"}],
+        [{"tag": "text", "text": f"🔥 热线索: {hot_leads} 个"}],
+        [{"tag": "text", "text": f"📁 总客户数: {total_convs} 个"}],
+    ]
+
+    title = f"📋 周报 — {week_label}"
+    return await _send_feishu_webhook(title, lines)
+
+
 async def send_hot_leads_alert(results: list[dict]) -> bool:
     """Send immediate Feishu alert for high-priority leads after pipeline run.
 

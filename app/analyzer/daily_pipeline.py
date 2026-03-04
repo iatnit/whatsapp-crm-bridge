@@ -407,6 +407,10 @@ async def run_daily_pipeline() -> dict:
                         await update_contact(hs_contact_id, extra={"customer_stage": new_stage})
                         if new_stage == "repeat_buyer":
                             logger.info("Repeat buyer detected: %s (%s)", feishu_name, phone)
+                            tier = hs_extra.get("customer_tier", "")
+                            if tier in ("C", "D", ""):
+                                from app.notifier.daily_reminder import send_tier_upgrade_suggestion
+                                asyncio.create_task(send_tier_upgrade_suggestion(feishu_name, phone, tier))
                 except Exception as e:
                     logger.error("HubSpot deal creation error for %s: %s", customer_name, e)
 

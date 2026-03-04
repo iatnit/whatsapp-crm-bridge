@@ -16,6 +16,68 @@ from app.autoreply.prompts import SYSTEM_PROMPT_TEMPLATE, USER_PROMPT_TEMPLATE
 
 logger = logging.getLogger(__name__)
 
+# ── Timezone awareness ─────────────────────────────────────────────────
+# Phone country prefix → UTC offset in hours (covers 95%+ of LOCA customers)
+_TIMEZONE_MAP: dict[str, float] = {
+    "+91": 5.5,    # India
+    "+92": 5.0,    # Pakistan
+    "+94": 5.5,    # Sri Lanka
+    "+977": 5.75,  # Nepal
+    "+880": 6.0,   # Bangladesh
+    "+60": 8.0,    # Malaysia
+    "+62": 7.0,    # Indonesia (WIB)
+    "+63": 8.0,    # Philippines
+    "+66": 7.0,    # Thailand
+    "+84": 7.0,    # Vietnam
+    "+95": 6.5,    # Myanmar
+    "+971": 4.0,   # UAE
+    "+966": 3.0,   # Saudi Arabia
+    "+973": 3.0,   # Bahrain
+    "+974": 3.0,   # Qatar
+    "+968": 4.0,   # Oman
+    "+965": 3.0,   # Kuwait
+    "+962": 2.0,   # Jordan
+    "+964": 3.0,   # Iraq
+    "+961": 2.0,   # Lebanon
+    "+20": 2.0,    # Egypt
+    "+234": 1.0,   # Nigeria
+    "+254": 3.0,   # Kenya
+    "+27": 2.0,    # South Africa
+    "+44": 0.0,    # UK
+    "+33": 1.0,    # France
+    "+49": 1.0,    # Germany
+    "+39": 1.0,    # Italy
+    "+34": 1.0,    # Spain
+    "+351": 0.0,   # Portugal
+    "+55": -3.0,   # Brazil
+    "+1": -5.0,    # USA/Canada (EST approx)
+    "+86": 8.0,    # China
+}
+
+
+def _get_customer_local_hour(phone: str) -> int | None:
+    """Return customer's current local hour (0-23), or None if timezone unknown."""
+    # Match longest prefix first
+    for prefix in sorted(_TIMEZONE_MAP, key=len, reverse=True):
+        if phone.startswith(prefix):
+            offset = _TIMEZONE_MAP[prefix]
+            tz = timezone(timedelta(hours=offset))
+            return datetime.now(tz).hour
+    return None
+
+
+def _is_sleeping_hours(phone: str) -> bool:
+    """Return True if it's 1am–6am in the customer's local timezone (likely asleep).
+
+    Outside these hours → allow auto-reply as usual.
+    Unknown timezone → allow (default safe).
+    """
+    hour = _get_customer_local_hour(phone)
+    if hour is None:
+        return False  # unknown → don't suppress
+    return 1 <= hour < 6
+
+
 # In-memory rate limiting state
 _last_reply_ts: dict[str, float] = {}  # phone → last reply timestamp
 _hourly_counts: dict[str, list[float]] = defaultdict(list)  # phone → list of reply timestamps
@@ -169,8 +231,10 @@ def _format_customer_context(ctx: dict) -> str:
         lines.append(f"Known product interest: {products}")
 
     # Relationship guidance
-    if stage == "new":
-        lines.append("→ First contact. OK to ask basic questions (product, shop/factory).")
+    if stage == "new" and total == 1:
+        lines.append("→ FIRST EVER message. Welcome them briefly, then ask ONE of: which product? or do you have shop/factory? Do NOT send a long company intro.")
+    elif stage == "new":
+        lines.append("→ Very new contact. Ask basic questions (product interest, shop/factory). Keep it casual.")
     elif stage == "early":
         lines.append("→ Early contact. Check history before asking — don't repeat questions.")
     elif stage == "developing":
@@ -287,6 +351,12 @@ async def handle_auto_reply(
     # Skip customers with AI disabled (big/VIP customers handled manually)
     if await is_ai_disabled(phone):
         logger.debug("AI disabled for %s, skipping auto-reply", phone)
+        return
+
+    # Skip if customer is likely asleep (1am–6am local time)
+    if _is_sleeping_hours(phone):
+        hour = _get_customer_local_hour(phone)
+        logger.info("Skipping auto-reply for %s — customer local time ~%02d:00 (sleeping hours)", phone, hour or 0)
         return
 
     # Skip non-text-like messages that don't need replies
