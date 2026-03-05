@@ -123,6 +123,79 @@ async def update_customer_profile(phone: str, payload: dict):
     return {"status": "ok", "phone": phone, "updated": list(updates.keys()), "hubspot_synced": hs_synced}
 
 
+# ── Customer Notes ─────────────────────────────────────────────────
+
+@router.get("/api/v1/customer/{phone}/notes", dependencies=[Depends(verify_admin)])
+async def get_customer_notes(phone: str):
+    """Return all notes for a customer."""
+    from app.store.database import get_db
+    async with get_db() as db:
+        cursor = await db.execute(
+            "SELECT id, content, created_at FROM customer_notes "
+            "WHERE phone = ? ORDER BY created_at DESC",
+            (phone,),
+        )
+        notes = [dict(row) for row in await cursor.fetchall()]
+    return {"phone": phone, "notes": notes}
+
+
+@router.post("/api/v1/customer/{phone}/notes", dependencies=[Depends(verify_admin)])
+async def add_customer_note(phone: str, payload: dict):
+    """Add a note to a customer. Body: {"content": "..."}"""
+    from app.store.database import get_db
+    from app.store.audit import log_action
+
+    content = (payload.get("content") or "").strip()
+    if not content:
+        return {"error": "Empty note"}, 400
+
+    async with get_db() as db:
+        await db.execute(
+            "INSERT INTO customer_notes (phone, content) VALUES (?, ?)",
+            (phone, content),
+        )
+        await db.commit()
+
+    await log_action("add_note", phone, content[:80])
+    return {"status": "ok"}
+
+
+@router.delete("/api/v1/customer/{phone}/notes/{note_id}", dependencies=[Depends(verify_admin)])
+async def delete_customer_note(phone: str, note_id: int):
+    """Delete a note."""
+    from app.store.database import get_db
+    async with get_db() as db:
+        await db.execute(
+            "DELETE FROM customer_notes WHERE id = ? AND phone = ?",
+            (note_id, phone),
+        )
+        await db.commit()
+    return {"status": "ok"}
+
+
+# ── Follow-up Reminder ────────────────────────────────────────────
+
+@router.post("/api/v1/customer/{phone}/followup", dependencies=[Depends(verify_admin)])
+async def set_followup(phone: str, payload: dict):
+    """Set or clear follow-up date. Body: {"date": "2026-03-10"} or {"date": ""}"""
+    from app.store.database import get_db
+    from app.store.audit import log_action
+
+    date_str = (payload.get("date") or "").strip()
+    async with get_db() as db:
+        await db.execute(
+            "UPDATE conversations SET next_followup = ? WHERE phone = ?",
+            (date_str, phone),
+        )
+        await db.commit()
+
+    if date_str:
+        await log_action("set_followup", phone, date_str)
+    else:
+        await log_action("clear_followup", phone)
+    return {"status": "ok", "next_followup": date_str}
+
+
 @router.get("/api/v1/dashboard/search", dependencies=[Depends(verify_admin)])
 async def search_messages(
     q: str = Query(..., min_length=1),

@@ -109,6 +109,22 @@ MIGRATIONS = [
         created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
     );
     """,
+    # Customer notes (separate from chat messages)
+    """
+    CREATE TABLE IF NOT EXISTS customer_notes (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        phone       TEXT NOT NULL,
+        content     TEXT NOT NULL,
+        created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_notes_phone ON customer_notes(phone);
+    """,
+    # Follow-up reminder date per customer
+    """
+    ALTER TABLE conversations ADD COLUMN next_followup TEXT DEFAULT '';
+    """,
     # P1a: Customer actions table for daily reminders
     """
     CREATE TABLE IF NOT EXISTS customer_actions (

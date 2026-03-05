@@ -441,6 +441,36 @@ async def get_overview_stats() -> dict:
             for r in top_rows
         ]
 
+        # Stage funnel distribution
+        cursor = await db.execute(
+            "SELECT COALESCE(customer_stage, '') as stage, COUNT(*) as cnt "
+            "FROM conversations GROUP BY stage ORDER BY cnt DESC"
+        )
+        stage_rows = await cursor.fetchall()
+        stages = [{"stage": r[0] or "unset", "count": r[1]} for r in stage_rows]
+
+        # Overdue follow-ups (next_followup <= today and non-empty)
+        cursor = await db.execute(
+            "SELECT phone, display_name, customer_name, customer_tier, "
+            "       next_followup, last_message_at "
+            "FROM conversations "
+            "WHERE next_followup != '' AND next_followup IS NOT NULL "
+            "  AND next_followup <= ? "
+            "ORDER BY next_followup",
+            (today_str,),
+        )
+        overdue_rows = await cursor.fetchall()
+        overdue_followups = [
+            {
+                "phone": r[0],
+                "name": r[2] or r[1] or r[0],
+                "tier": r[3] or "",
+                "followup_date": r[4],
+                "last_contact": r[5][:10] if r[5] else "",
+            }
+            for r in overdue_rows
+        ]
+
     return {
         "total_customers": total,
         "active_7d": active_7d,
@@ -450,4 +480,6 @@ async def get_overview_stats() -> dict:
         "priorities": priorities,
         "msg_7d": msg_7d,
         "top_customers": top_customers,
+        "stages": stages,
+        "overdue_followups": overdue_followups,
     }

@@ -56,6 +56,30 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .loading{text-align:center;color:#94a3b8;padding:40px}
 .back-link{display:inline-flex;align-items:center;gap:4px;color:#2563eb;text-decoration:none;font-size:.85rem;margin-bottom:16px}
 .back-link:hover{text-decoration:underline}
+/* Follow-up */
+.followup-row{display:flex;align-items:center;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid #f1f5f9}
+.followup-row .fl-label{font-size:.8rem;color:#64748b;font-weight:600}
+.followup-row input[type=date]{padding:4px 8px;border:1px solid #d1d7db;border-radius:6px;font-size:.8rem;outline:none}
+.followup-row input[type=date]:focus{border-color:#2563eb}
+.followup-row .fl-set{padding:4px 10px;background:#2563eb;color:#fff;border:none;border-radius:6px;font-size:.75rem;cursor:pointer;font-weight:600}
+.followup-row .fl-clear{padding:4px 10px;background:#f1f5f9;color:#64748b;border:none;border-radius:6px;font-size:.75rem;cursor:pointer}
+.fl-status{font-size:.7rem;color:#22c55e;margin-left:4px}
+.fl-overdue{color:#dc2626;font-weight:600;font-size:.75rem}
+/* Notes */
+.notes-section{background:#fff;border-radius:12px;padding:20px 24px;box-shadow:0 1px 3px rgba(0,0,0,.08);margin-bottom:20px}
+.notes-section h3{font-size:1rem;color:#0f172a;margin-bottom:12px}
+.note-add{display:flex;gap:8px;margin-bottom:12px}
+.note-add textarea{flex:1;padding:8px 12px;border:1px solid #d1d7db;border-radius:8px;font-size:.85rem;font-family:inherit;outline:none;resize:none;min-height:36px;max-height:80px}
+.note-add textarea:focus{border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+.note-add button{padding:8px 16px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:.85rem;font-weight:600;cursor:pointer;white-space:nowrap}
+.note-add button:hover{background:#1d4ed8}
+.note-item{padding:8px 0;border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.note-item:last-child{border-bottom:none}
+.note-content{font-size:.85rem;color:#1e293b;white-space:pre-wrap;flex:1}
+.note-meta{font-size:.7rem;color:#94a3b8;white-space:nowrap}
+.note-del{font-size:.7rem;color:#dc2626;cursor:pointer;opacity:.5;margin-left:4px}
+.note-del:hover{opacity:1}
+.note-empty{color:#94a3b8;font-size:.85rem;padding:8px 0}
 @media(max-width:768px){
   .nav{padding:8px 12px;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch}
   .nav a{font-size:12px;padding:5px 8px;white-space:nowrap;flex-shrink:0}
@@ -81,6 +105,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   .tpl-label{font-size:.7rem}
   .send-status{padding:2px 10px;font-size:.7rem}
   .back-link{font-size:.8rem;margin-bottom:10px}
+  .notes-section{padding:12px;margin-bottom:12px;border-radius:8px}
+  .notes-section h3{font-size:.9rem;margin-bottom:8px}
+  .note-add textarea{font-size:.8rem;min-height:32px}
+  .note-add button{padding:6px 12px;font-size:.8rem}
+  .followup-row{flex-wrap:wrap;gap:6px}
 }
 @media(max-width:400px){
   .container{padding:6px}
@@ -98,6 +127,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <div class="container">
   <a href="/dashboard" class="back-link">&larr; Back to Dashboard</a>
   <div class="profile" id="profile"><div class="loading">Loading...</div></div>
+  <div class="notes-section">
+    <h3>Notes</h3>
+    <div class="note-add">
+      <textarea id="noteInput" placeholder="Add a note..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();addNote()}"></textarea>
+      <button onclick="addNote()">Add</button>
+    </div>
+    <div id="notesList"></div>
+  </div>
   <div class="chat">
     <div class="chat-header">
       <h2>Message History</h2>
@@ -247,9 +284,44 @@ function renderProfile() {
       '<div class="profile-item"><span class="label">Last:</span> <span class="val">'+(p.last_message_at?p.last_message_at.substring(0,10):'-')+'</span></div>'+
       '<div class="profile-item"><span class="label">Match:</span> <span class="val">'+esc(p.match_status||'-')+'</span></div>'+
       '<div class="profile-item"><span class="label">AI Reply:</span> <span class="val">'+(p.ai_disabled?'Disabled':'Enabled')+'</span></div>'+
-    '</div>';
+    '</div>'+
+    renderFollowup(p)+
+    '';
 
   document.title = (p.customer_name||p.display_name||p.phone)+' — CRM';
+}
+
+function renderFollowup(p) {
+  const today = new Date().toISOString().slice(0,10);
+  const fu = p.next_followup || '';
+  const isOverdue = fu && fu <= today;
+  let html = '<div class="followup-row"><span class="fl-label">Follow-up:</span>';
+  if (fu) {
+    html += '<span'+(isOverdue?' class="fl-overdue"':' style="font-size:.85rem;font-weight:500"')+'>'+esc(fu)+'</span>';
+    if (isOverdue) html += ' <span class="fl-overdue">OVERDUE</span>';
+    html += ' <button class="fl-clear" onclick="setFollowup(\'\')">Clear</button>';
+  }
+  html += '<input type="date" id="fuDate" value="'+esc(fu)+'" min="'+today+'" style="margin-left:auto">';
+  html += '<button class="fl-set" onclick="setFollowup(document.getElementById(\'fuDate\').value)">Set</button>';
+  html += '<span id="fuStatus" class="fl-status"></span>';
+  html += '</div>';
+  return html;
+}
+
+async function setFollowup(dateStr) {
+  try {
+    const res = await fetch('/api/v1/customer/'+encodeURIComponent(phone)+'/followup', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({date: dateStr}),
+    });
+    const data = await res.json();
+    if (res.ok && data.status==='ok') {
+      profile.next_followup = dateStr;
+      renderProfile();
+      const el = document.getElementById('fuStatus');
+      if (el) { el.textContent = dateStr ? 'Set!' : 'Cleared'; setTimeout(()=>{el.textContent=''},2000); }
+    }
+  } catch(e) {}
 }
 
 // ── Load ─────────────────────────────────────────────────────────
@@ -317,5 +389,46 @@ function exportMessages(){
   window.location.href='/api/v1/export/messages?phone='+encodeURIComponent(phone);
 }
 
+// ── Notes ───────────────────────────────────────────────────────
+let allNotes = [];
+
+async function loadNotes() {
+  try {
+    const d = await fetch('/api/v1/customer/'+encodeURIComponent(phone)+'/notes').then(r=>r.json());
+    allNotes = d.notes || [];
+    renderNotes();
+  } catch(e) {}
+}
+
+function renderNotes() {
+  const el = document.getElementById('notesList');
+  if (!allNotes.length) { el.innerHTML='<div class="note-empty">No notes yet</div>'; return; }
+  el.innerHTML = allNotes.map(n =>
+    '<div class="note-item"><div class="note-content">'+esc(n.content)+'</div>'+
+    '<span class="note-meta">'+esc(n.created_at||'')+'<span class="note-del" onclick="delNote('+n.id+')"> x</span></span></div>'
+  ).join('');
+}
+
+async function addNote() {
+  const inp = document.getElementById('noteInput');
+  const text = inp.value.trim();
+  if (!text) return;
+  try {
+    const res = await fetch('/api/v1/customer/'+encodeURIComponent(phone)+'/notes', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({content: text}),
+    });
+    if (res.ok) { inp.value = ''; await loadNotes(); }
+  } catch(e) {}
+}
+
+async function delNote(id) {
+  try {
+    await fetch('/api/v1/customer/'+encodeURIComponent(phone)+'/notes/'+id, {method:'DELETE'});
+    await loadNotes();
+  } catch(e) {}
+}
+
 load();
+loadNotes();
 </script></body></html>

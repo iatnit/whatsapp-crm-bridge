@@ -43,6 +43,18 @@ tr:hover td{background:#f8fafc}
 .sr-dir{font-size:.7rem;padding:2px 6px;border-radius:4px;font-weight:600}
 .sr-dir.inbound{background:#e2e8f0;color:#475569}
 .sr-dir.outbound{background:#dbeafe;color:#2563eb}
+.overdue-section{background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.08);margin-bottom:20px;display:none}
+.overdue-section h3{color:#dc2626;margin-bottom:10px}
+.od-item{padding:8px 10px;border-bottom:1px solid #f1f5f9;display:flex;gap:10px;align-items:center;cursor:pointer;font-size:.875rem}
+.od-item:hover{background:#fef2f2}
+.od-item:last-child{border-bottom:none}
+.od-date{color:#dc2626;font-weight:600;font-size:.8rem;white-space:nowrap}
+.od-name{font-weight:500;flex:1}
+.funnel-bar{display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:.85rem}
+.funnel-bar .fb-label{min-width:100px;color:#475569;text-align:right;font-size:.8rem}
+.funnel-bar .fb-track{flex:1;background:#f1f5f9;border-radius:4px;height:22px;position:relative;overflow:hidden}
+.funnel-bar .fb-fill{height:100%;border-radius:4px;display:flex;align-items:center;padding-left:6px;font-size:.75rem;color:#fff;font-weight:600;min-width:20px;transition:width .3s}
+.funnel-bar .fb-count{font-size:.8rem;color:#94a3b8;min-width:28px}
 @media(max-width:768px){
   body{padding:12px}
   .nav{padding:8px 12px;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch}
@@ -63,6 +75,10 @@ tr:hover td{background:#f8fafc}
   .sr-content{font-size:.8rem}
   th,td{padding:6px 6px;font-size:.8rem}
   .hide-mobile{display:none}
+  .overdue-section{padding:12px}
+  .od-item{padding:6px 6px;gap:6px;font-size:.8rem}
+  .funnel-bar .fb-label{min-width:70px;font-size:.7rem}
+  .funnel-bar .fb-count{font-size:.7rem}
 }
 @media(max-width:400px){
   body{padding:8px}
@@ -88,10 +104,16 @@ tr:hover td{background:#f8fafc}
   <div id="searchList"></div>
 </div>
 
+<div class="overdue-section" id="overdueSection">
+  <h3>Overdue Follow-ups</h3>
+  <div id="overdueList"></div>
+</div>
+
 <div class="kpis" id="kpis"></div>
 <div class="grid">
   <div class="card"><h3>Tier</h3><canvas id="tierChart"></canvas></div>
   <div class="card"><h3>Priority</h3><canvas id="prioChart"></canvas></div>
+  <div class="card" style="grid-column:span 2"><h3>Stage Funnel</h3><div id="funnelChart"></div></div>
   <div class="card" style="grid-column:span 2"><canvas id="msgChart"></canvas></div>
   <div class="card" style="grid-column:span 2">
     <h3>Top 30</h3>
@@ -167,6 +189,28 @@ async function load(){
       {label:'Outbound',data:d.msg_7d.map(m=>m.outbound),borderColor:'#10b981',backgroundColor:'rgba(16,185,129,.1)',fill:true,tension:.3}
     ]
   },options:{plugins:{title:{display:true,text:'7-Day Message Volume'}},scales:{y:{beginAtZero:true}}}});
+
+  // Stage funnel
+  const STAGE_COLORS={new_lead:'#3b82f6',contacted:'#6366f1',qualified:'#8b5cf6',negotiating:'#a855f7',sampling:'#d946ef',ordered:'#22c55e',repeat_buyer:'#16a34a',dormant:'#94a3b8',lost:'#dc2626',unset:'#e2e8f0'};
+  const STAGE_LABEL={new_lead:'New Lead',contacted:'Contacted',qualified:'Qualified',negotiating:'Negotiating',sampling:'Sampling',ordered:'Ordered',repeat_buyer:'Repeat',dormant:'Dormant',lost:'Lost',unset:'Unset'};
+  if(d.stages&&d.stages.length){
+    const maxCount=Math.max(...d.stages.map(s=>s.count));
+    document.getElementById('funnelChart').innerHTML=d.stages.map(s=>{
+      const pct=maxCount>0?Math.round(s.count/maxCount*100):0;
+      const color=STAGE_COLORS[s.stage]||'#94a3b8';
+      return '<div class="funnel-bar"><span class="fb-label">'+(STAGE_LABEL[s.stage]||s.stage)+'</span><div class="fb-track"><div class="fb-fill" style="width:'+pct+'%;background:'+color+'">'+s.count+'</div></div></div>';
+    }).join('');
+  }
+
+  // Overdue follow-ups
+  const odSection=document.getElementById('overdueSection');
+  if(d.overdue_followups&&d.overdue_followups.length){
+    odSection.style.display='block';
+    document.getElementById('overdueList').innerHTML=d.overdue_followups.map(o=>{
+      const tier=o.tier?'<span class="badge '+o.tier+'">'+o.tier+'</span>':'';
+      return '<div class="od-item" onclick="goCustomer(\''+o.phone+'\')"><span class="od-date">'+o.followup_date+'</span><span class="od-name">'+o.name+'</span>'+tier+'</div>';
+    }).join('');
+  } else { odSection.style.display='none'; }
 
   // Top 30 — clickable rows
   document.getElementById('topTb').innerHTML=d.top_customers.map((c,i)=>{
