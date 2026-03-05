@@ -196,6 +196,20 @@ async def lifespan(app: FastAPI):
         )
         logger.info("Weekly report enabled: Sunday 09:00 CST → Feishu webhook")
 
+    # CEO weekly report every Monday 9am CST (AI summary of daily reports)
+    if settings.feishu_app_id and settings.feishu_app_secret:
+        from app.notifier.weekly_ceo_report import run_weekly_ceo_report
+        scheduler.add_job(
+            run_weekly_ceo_report,
+            "cron",
+            day_of_week="mon",
+            hour=9,
+            minute=0,
+            timezone="Asia/Shanghai",
+            id="weekly_ceo_report",
+        )
+        logger.info("CEO weekly report enabled: Monday 09:00 CST → Feishu CEO周报")
+
     scheduler.start()
     logger.info(
         "App started. Daily analysis scheduled at %02d:%02d",
@@ -327,6 +341,17 @@ async def manual_dormant_outreach(days: int = 30):
     sys.path.insert(0, str(Path(__file__).parent.parent))
     from scripts.dormant_customers import run as dormant_run
     task = asyncio.create_task(dormant_run(days=days, dry_run=False))
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+    return {"status": "started", "days": days}
+
+
+@app.post("/api/v1/weekly-ceo-report/trigger", dependencies=[Depends(verify_admin)])
+async def manual_weekly_ceo_report(days: int = 7):
+    """Manually trigger CEO weekly report generation (AI summary of daily reports → Feishu CEO周报)."""
+    import asyncio
+    from app.notifier.weekly_ceo_report import run_weekly_ceo_report
+    task = asyncio.create_task(run_weekly_ceo_report(days=days))
     _background_tasks.add(task)
     task.add_done_callback(_background_tasks.discard)
     return {"status": "started", "days": days}
