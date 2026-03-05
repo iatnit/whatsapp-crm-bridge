@@ -169,7 +169,7 @@ function _authHeaders() {
   return h;
 }
 function _authUrl(url) {
-  return _adminToken ? url + (url.includes('?') ? '&' : '?') + 'admin_token=' + encodeURIComponent(_adminToken) : url;
+  return url;  // token now sent via Authorization header only (no query param)
 }
 
 let customers = [];

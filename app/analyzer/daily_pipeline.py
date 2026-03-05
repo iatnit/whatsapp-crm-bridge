@@ -21,6 +21,7 @@ from app.store.retry_queue import enqueue, get_pending, mark_success, mark_retri
 from app.matcher.customer_matcher import match_all_unmatched, load_customers
 from app.analyzer.claude_analyzer import analyze_conversation
 from app.config import settings
+from app.utils.tasks import safe_task
 from app.writers.feishu_writer import (
     ensure_customer, ensure_followup, clear_customer_cache, get_customer_number,
 )
@@ -269,11 +270,8 @@ async def run_daily_pipeline() -> dict:
 
             # Fire immediate alert if customer requested a sample
             if analysis.get("crm_fields", {}).get("sample_requested"):
-                try:
-                    from app.notifier.daily_reminder import send_sample_request_alert
-                    asyncio.create_task(send_sample_request_alert(feishu_name, phone, analysis))
-                except Exception as e:
-                    logger.warning("Sample alert task failed for %s: %s", feishu_name, e)
+                from app.notifier.daily_reminder import send_sample_request_alert
+                safe_task(send_sample_request_alert(feishu_name, phone, analysis), name=f"sample-alert-{phone}")
 
             # Cache location to SQLite
             if location:
@@ -423,7 +421,7 @@ async def run_daily_pipeline() -> dict:
                             tier = hs_extra.get("customer_tier", "")
                             if tier in ("C", "D", ""):
                                 from app.notifier.daily_reminder import send_tier_upgrade_suggestion
-                                asyncio.create_task(send_tier_upgrade_suggestion(feishu_name, phone, tier))
+                                safe_task(send_tier_upgrade_suggestion(feishu_name, phone, tier), name=f"tier-upgrade-{phone}")
                 except Exception as e:
                     logger.error("HubSpot deal creation error for %s: %s", customer_name, e)
 
@@ -534,13 +532,10 @@ async def run_daily_pipeline() -> dict:
     )
 
     # Fire-and-forget alerts (non-blocking)
-    try:
-        from app.notifier.daily_reminder import send_hot_leads_alert, send_pipeline_error_alert
-        if results:
-            asyncio.create_task(send_hot_leads_alert(results))
-        if errors:
-            asyncio.create_task(send_pipeline_error_alert(errors, analyzed_count))
-    except Exception as e:
-        logger.warning("Failed to send pipeline alerts: %s", e)
+    from app.notifier.daily_reminder import send_hot_leads_alert, send_pipeline_error_alert
+    if results:
+        safe_task(send_hot_leads_alert(results), name="hot-leads-alert")
+    if errors:
+        safe_task(send_pipeline_error_alert(errors, analyzed_count), name="pipeline-error-alert")
 
     return summary

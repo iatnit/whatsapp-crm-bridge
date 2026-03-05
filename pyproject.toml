@@ -11,6 +11,7 @@ dependencies = [
     "aiosqlite>=0.20.0",
     "apscheduler>=3.10.0",
     "pydantic-settings>=2.5.0",
+    "slowapi>=0.1.9",
 ]
 
 [project.optional-dependencies]

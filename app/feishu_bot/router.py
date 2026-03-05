@@ -1,11 +1,12 @@
 """Feishu Bot event callback router."""
 
-import asyncio
 import logging
 import time
 from collections import OrderedDict
 
 from fastapi import APIRouter, Request
+
+from app.utils.tasks import safe_task
 
 import httpx
 
@@ -146,6 +147,6 @@ async def feishu_event(request: Request):
     logger.info("Feishu bot msg from %s: %s", open_id, user_text[:80])
 
     # 5) Background processing — return immediately for 3s ACK
-    asyncio.create_task(_process_message(chat_id, user_text, open_id))
+    safe_task(_process_message(chat_id, user_text, open_id), name=f"feishu-bot-{open_id}")
 
     return {"code": 0}

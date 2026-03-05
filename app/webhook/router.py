@@ -1,19 +1,24 @@
 """WATI webhook endpoint — receives all WhatsApp messages (inbound + outbound)."""
 
-import asyncio
+import hmac
 import logging
 import time
 from typing import Any
 
 from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.webhook.media import download_media
 from app.store.messages import save_message, update_conversation
 from app.autoreply.responder import handle_auto_reply, notify_outbound
 from app.utils.phone import normalize_phone
+from app.utils.tasks import safe_task
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1")
+limiter = Limiter(key_func=get_remote_address)
 
 
 async def _get_customer_name(phone: str) -> str:
@@ -123,6 +128,7 @@ async def _feishu_ensure_customer(phone: str, display_name: str) -> None:
 
 
 @router.post("/webhook")
+@limiter.limit("120/minute")
 async def receive_webhook(request: Request):
     """Process incoming webhook events from WATI.
 
@@ -141,9 +147,9 @@ async def receive_webhook(request: Request):
     from app.config import settings
     if settings.webhook_secret:
         token = request.query_params.get("token", "")
-        if token != settings.webhook_secret:
+        if not hmac.compare_digest(token, settings.webhook_secret):
             logger.warning("Webhook auth failed from %s", request.client.host)
-            return {"status": "unauthorized"}
+            return JSONResponse({"status": "unauthorized"}, status_code=401)
 
     try:
         payload: dict[str, Any] = await request.json()
@@ -246,12 +252,13 @@ async def receive_webhook(request: Request):
         )
 
         # Forward to Obsidian local receiver (fire-and-forget, all messages)
-        asyncio.create_task(
+        safe_task(
             _forward_obsidian(
                 wa_message_id, phone, display_name,
                 direction, msg_type, content, timestamp,
                 media_url=media_url,
-            )
+            ),
+            name=f"obsidian-fwd-{phone}",
         )
 
         # Track human outbound → pause AI auto-reply
@@ -260,13 +267,14 @@ async def receive_webhook(request: Request):
 
         # Real-time CRM upsert (fire-and-forget)
         if direction == "inbound" and msg_type not in ("reaction", "sticker"):
-            asyncio.create_task(_hubspot_upsert_contact(phone, display_name))
-            asyncio.create_task(_feishu_ensure_customer(phone, display_name))
+            safe_task(_hubspot_upsert_contact(phone, display_name), name=f"hs-upsert-{phone}")
+            safe_task(_feishu_ensure_customer(phone, display_name), name=f"feishu-customer-{phone}")
 
         # Trigger AI auto-reply for inbound messages
         if direction == "inbound" and msg_type not in ("reaction", "sticker"):
-            asyncio.create_task(
-                handle_auto_reply(phone, display_name, content, msg_type)
+            safe_task(
+                handle_auto_reply(phone, display_name, content, msg_type),
+                name=f"auto-reply-{phone}",
             )
 
     return {"status": "ok"}

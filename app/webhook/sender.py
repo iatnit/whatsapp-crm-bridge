@@ -14,6 +14,25 @@ logger = logging.getLogger(__name__)
 # Max retry attempts for transient WATI failures
 _MAX_SEND_RETRIES = 2
 
+# ── Shared HTTP client (TCP connection reuse) ─────────────────────────
+_http: httpx.AsyncClient | None = None
+
+
+def _get_http() -> httpx.AsyncClient:
+    """Get or create shared httpx client for TCP connection reuse."""
+    global _http
+    if _http is None or _http.is_closed:
+        _http = httpx.AsyncClient(timeout=15)
+    return _http
+
+
+async def close_http_client():
+    """Close the shared httpx client on shutdown."""
+    global _http
+    if _http and not _http.is_closed:
+        await _http.aclose()
+        _http = None
+
 
 async def send_template_message(
     to: str,
@@ -53,13 +72,13 @@ async def send_template_message(
     }
 
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.post(
-                url,
-                params={"whatsappNumber": to},
-                json=payload,
-                headers=headers,
-            )
+        client = _get_http()
+        resp = await client.post(
+            url,
+            params={"whatsappNumber": to},
+            json=payload,
+            headers=headers,
+        )
         if resp.status_code not in (200, 201):
             logger.error(
                 "WATI template send failed to %s: HTTP %d %s",
@@ -117,8 +136,8 @@ async def send_text_message(to: str, text: str) -> str | None:
     resp = None
     for attempt in range(_MAX_SEND_RETRIES + 1):
         try:
-            async with httpx.AsyncClient(timeout=15) as client:
-                resp = await client.post(url, json=payload, headers=headers)
+            client = _get_http()
+            resp = await client.post(url, json=payload, headers=headers)
             if resp.status_code in (200, 201):
                 break
             # 4xx = client error, don't retry

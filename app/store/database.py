@@ -117,6 +117,8 @@ async def init_db() -> None:
     """Create tables if they don't exist, then run migrations."""
     settings.data_dir.mkdir(parents=True, exist_ok=True)
     async with aiosqlite.connect(str(settings.db_path)) as db:
+        # WAL mode: allows concurrent readers during writes (major perf win)
+        await db.execute("PRAGMA journal_mode=WAL")
         await db.executescript(SCHEMA)
         await db.commit()
 
@@ -132,14 +134,18 @@ async def init_db() -> None:
     from app.store.retry_queue import init_retry_table
     await init_retry_table()
 
-    logger.info("Database initialized at %s", settings.db_path)
+    logger.info("Database initialized at %s (WAL mode)", settings.db_path)
 
 
 @asynccontextmanager
 async def get_db():
-    """Async context manager yielding an aiosqlite connection."""
+    """Async context manager yielding an aiosqlite connection.
+
+    Sets busy_timeout so concurrent writers wait instead of failing immediately.
+    """
     db = await aiosqlite.connect(str(settings.db_path))
     db.row_factory = aiosqlite.Row
+    await db.execute("PRAGMA busy_timeout = 5000")
     try:
         yield db
     finally:
