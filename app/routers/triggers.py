@@ -92,5 +92,7 @@ async def send_message(request: Request, payload: dict):
 
     wa_id = await send_text_message(to, text)
     if wa_id:
+        from app.store.audit import log_action
+        await log_action("send_message", to, f"len={len(text)}")
         return {"status": "sent", "message_id": wa_id}
     return {"status": "failed"}

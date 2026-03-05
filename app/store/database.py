@@ -99,6 +99,16 @@ MIGRATIONS = [
     """
     ALTER TABLE conversations ADD COLUMN customer_stage TEXT DEFAULT '';
     """,
+    # Audit log for admin actions
+    """
+    CREATE TABLE IF NOT EXISTS audit_log (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        action      TEXT NOT NULL,
+        target      TEXT DEFAULT '',
+        details     TEXT DEFAULT '',
+        created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    """,
     # P1a: Customer actions table for daily reminders
     """
     CREATE TABLE IF NOT EXISTS customer_actions (

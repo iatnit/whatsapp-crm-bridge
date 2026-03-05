@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Audit Log — LOCACRYSTAL CRM</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f1f5f9;color:#1e293b;padding:0}
+.nav{background:#0f172a;padding:10px 24px;display:flex;gap:16px;align-items:center}
+.nav a{color:#94a3b8;text-decoration:none;font-size:14px;font-weight:500;padding:6px 12px;border-radius:6px;transition:all .15s}
+.nav a:hover{color:#fff;background:rgba(255,255,255,.1)}
+.nav a.active{color:#fff;background:#2563eb}
+.container{max-width:960px;margin:0 auto;padding:24px}
+h1{font-size:1.4rem;margin-bottom:16px;color:#0f172a}
+table{width:100%;border-collapse:collapse;font-size:.875rem;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+th{text-align:left;padding:10px 14px;border-bottom:2px solid #e2e8f0;color:#64748b;font-weight:600;background:#f8fafc}
+td{padding:10px 14px;border-bottom:1px solid #f1f5f9}
+tr:hover td{background:#f8fafc}
+.action{font-weight:600;color:#2563eb}
+.target{font-family:monospace;color:#64748b;font-size:.8rem}
+.details{color:#94a3b8;font-size:.8rem;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.time{color:#94a3b8;font-size:.8rem;white-space:nowrap}
+.empty{text-align:center;padding:40px;color:#94a3b8}
+</style></head><body>
+<nav class="nav">
+  <a href="/dashboard">Dashboard</a>
+  <a href="/ai-manager">AI Manager</a>
+  <a class="active" href="#">Audit Log</a>
+  <a href="/logout" style="margin-left:auto">Logout</a>
+</nav>
+<div class="container">
+  <h1>Operation Audit Log</h1>
+  <table>
+    <thead><tr><th>Time</th><th>Action</th><th>Target</th><th>Details</th></tr></thead>
+    <tbody id="tbody"><tr><td colspan="4" class="empty">Loading...</td></tr></tbody>
+  </table>
+</div>
+<script>
+async function load(){
+  const d=await fetch('/api/v1/audit/logs?limit=200').then(r=>r.json());
+  const tb=document.getElementById('tbody');
+  if(!d.logs||!d.logs.length){
+    tb.innerHTML='<tr><td colspan="4" class="empty">No audit logs yet</td></tr>';
+    return;
+  }
+  tb.innerHTML=d.logs.map(l=>{
+    const t=l.created_at||'';
+    return '<tr>'+
+      '<td class="time">'+esc(t)+'</td>'+
+      '<td class="action">'+esc(l.action)+'</td>'+
+      '<td class="target">'+esc(l.target)+'</td>'+
+      '<td class="details">'+esc(l.details)+'</td>'+
+    '</tr>';
+  }).join('');
+}
+function esc(s){const d=document.createElement('div');d.textContent=s||'';return d.innerHTML}
+load();
+</script></body></html>

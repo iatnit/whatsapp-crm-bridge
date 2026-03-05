@@ -179,6 +179,8 @@ async def disable_ai(phone: str):
     found = await set_ai_disabled(phone, disabled=True)
     if not found:
         return {"error": f"Phone {phone} not found in conversations"}
+    from app.store.audit import log_action
+    await log_action("disable_ai", phone)
     return {"status": "ok", "phone": phone, "ai_disabled": True}
 
 
@@ -189,6 +191,8 @@ async def enable_ai(phone: str):
     found = await set_ai_disabled(phone, disabled=False)
     if not found:
         return {"error": f"Phone {phone} not found in conversations"}
+    from app.store.audit import log_action
+    await log_action("enable_ai", phone)
     return {"status": "ok", "phone": phone, "ai_disabled": False}
 
 
@@ -212,6 +216,8 @@ async def set_customer_size_api(phone: str, payload: dict):
     found = await set_customer_size(phone, size)
     if not found:
         return JSONResponse({"error": f"Phone {phone} not found"}, status_code=404)
+    from app.store.audit import log_action
+    await log_action("set_size", phone, f"size={size}")
     return {"status": "ok", "phone": phone, "customer_size": size}
 
 
@@ -246,7 +252,61 @@ async def update_tags(phone: str, payload: dict):
                     h["customer_tags"] = tags_str
                     break
         _save_hubspot_to_disk(_hubspot_cache)
+    from app.store.audit import log_action
+    await log_action("set_tags", phone, f"tags={tags_str}")
     return {"status": "ok", "phone": phone, "tags": tags_str}
+
+
+# ── Batch Operations ──────────────────────────────────────────────────
+
+@router.post("/api/v1/ai/batch", dependencies=[Depends(verify_admin)])
+async def batch_action(payload: dict):
+    """Batch operations on multiple customers.
+
+    Body: {"phones": [...], "action": "enable_ai|disable_ai|set_size", "value": "..."}
+    """
+    from app.store.conversations import set_ai_disabled, set_customer_size
+    from app.store.audit import log_action
+
+    phones = payload.get("phones", [])
+    action = payload.get("action", "")
+    value = payload.get("value", "")
+
+    if not phones or not action:
+        return JSONResponse({"error": "Missing phones or action"}, status_code=400)
+
+    ok, failed = 0, 0
+
+    if action == "enable_ai":
+        for phone in phones:
+            if await set_ai_disabled(phone, disabled=False):
+                ok += 1
+            else:
+                failed += 1
+        await log_action("batch_enable_ai", f"{len(phones)} customers", f"ok={ok}")
+
+    elif action == "disable_ai":
+        for phone in phones:
+            if await set_ai_disabled(phone, disabled=True):
+                ok += 1
+            else:
+                failed += 1
+        await log_action("batch_disable_ai", f"{len(phones)} customers", f"ok={ok}")
+
+    elif action == "set_size":
+        if value not in _VALID_SIZES:
+            return JSONResponse({"error": f"Invalid size: {value}"}, status_code=400)
+        for phone in phones:
+            if await set_customer_size(phone, value):
+                ok += 1
+            else:
+                failed += 1
+        await log_action("batch_set_size", f"{len(phones)} customers", f"size={value}, ok={ok}")
+
+    else:
+        return JSONResponse({"error": f"Unknown action: {action}"}, status_code=400)
+
+    return {"status": "ok", "action": action, "ok": ok, "failed": failed}
 
 
 # ── Refresh ───────────────────────────────────────────────────────────

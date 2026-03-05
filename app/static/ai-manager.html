@@ -80,6 +80,19 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .toggle input:checked + .slider { background: #25d366; }
 .toggle input:checked + .slider::before { transform: translateX(16px); }
 .toggle input:disabled + .slider { opacity: .5; cursor: wait; }
+/* Batch selection */
+.card .cb { margin-top: 12px; flex-shrink: 0; width: 18px; height: 18px; accent-color: #008069; cursor: pointer; }
+.batch-bar { position: fixed; bottom: 0; left: 0; right: 0; background: #0f172a; color: #fff; padding: 12px 20px; display: flex; align-items: center; gap: 10px; z-index: 20; flex-wrap: wrap; transform: translateY(100%); transition: transform .2s; }
+.batch-bar.show { transform: translateY(0); }
+.batch-bar .bcount { font-size: 14px; font-weight: 600; min-width: 90px; }
+.batch-bar button { padding: 6px 14px; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.batch-bar .b-enable { background: #25d366; color: #fff; }
+.batch-bar .b-disable { background: #6b7280; color: #fff; }
+.batch-bar .b-size { background: #2563eb; color: #fff; }
+.batch-bar .b-cancel { background: transparent; color: #94a3b8; border: 1px solid #94a3b8; margin-left: auto; }
+.batch-bar select { padding: 6px 10px; border-radius: 6px; font-size: 13px; border: 1px solid #475569; background: #1e293b; color: #fff; }
+.select-all-row { padding: 6px 20px; background: #fff; border-bottom: 1px solid #e0e0e0; display: flex; align-items: center; gap: 8px; font-size: 13px; color: #667781; }
+.select-all-row input { accent-color: #008069; width: 16px; height: 16px; cursor: pointer; }
 .empty { text-align: center; padding: 60px 20px; color: #667781; }
 .loading { text-align: center; padding: 60px 20px; color: #667781; }
 .pagination { display: flex; justify-content: center; align-items: center; gap: 12px; padding: 14px 20px; max-width: 900px; margin: 0 auto; }
@@ -102,6 +115,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 <nav style="background:#0f172a;padding:10px 24px;display:flex;gap:16px;align-items:center">
   <a href="/dashboard" style="color:#94a3b8;text-decoration:none;font-size:14px;font-weight:500;padding:6px 12px;border-radius:6px;transition:all .15s">Dashboard</a>
   <a href="#" onclick="return false" style="color:#fff;text-decoration:none;font-size:14px;font-weight:500;padding:6px 12px;border-radius:6px;background:#2563eb">AI Manager</a>
+  <a href="/audit" style="color:#94a3b8;text-decoration:none;font-size:14px;font-weight:500;padding:6px 12px;border-radius:6px;transition:all .15s">Audit Log</a>
   <a href="/logout" style="color:#94a3b8;text-decoration:none;font-size:14px;font-weight:500;padding:6px 12px;border-radius:6px;margin-left:auto;transition:all .15s">Logout</a>
 </nav>
 
@@ -154,6 +168,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
   </select>
 </div>
 
+<div class="select-all-row">
+  <input type="checkbox" id="selectAll" onchange="toggleSelectAll(this.checked)">
+  <label for="selectAll">Select all on this page</label>
+</div>
+
 <div class="list" id="list">
   <div class="loading">Loading customers...</div>
 </div>
@@ -161,6 +180,20 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
   <button onclick="prevPage()">&laquo; Prev</button>
   <span class="page-info" id="page-info"></span>
   <button onclick="nextPage()">Next &raquo;</button>
+</div>
+
+<div class="batch-bar" id="batchBar">
+  <span class="bcount" id="batchCount">0 selected</span>
+  <button class="b-enable" onclick="batchAction('enable_ai')">Enable AI</button>
+  <button class="b-disable" onclick="batchAction('disable_ai')">Disable AI</button>
+  <select id="batchSize" onchange="if(this.value)batchAction('set_size',this.value)">
+    <option value="">Set Size...</option>
+    <option value="big">Big</option>
+    <option value="medium">Medium</option>
+    <option value="small">Small</option>
+    <option value="">Clear Size</option>
+  </select>
+  <button class="b-cancel" onclick="clearSelection()">Cancel</button>
 </div>
 
 <script>
@@ -176,6 +209,7 @@ let customers = [];
 let openDropdown = null;
 let currentPage = 1;
 let customFilter = null;  // 'hot' or null
+let selectedPhones = new Set();
 const PAGE_SIZE = 50;
 const SOURCE_ORDER = { both: 0, hubspot: 1, local: 2 };
 
@@ -399,7 +433,9 @@ function render() {
       '</div>';
     }
 
+    const checked = selectedPhones.has(c.phone) ? ' checked' : '';
     return '<div class="card">' +
+      '<input type="checkbox" class="cb" data-phone="' + esc(c.phone) + '"' + checked + ' onchange="toggleSelect(this)">' +
       '<div class="avatar">' + initials(c) + '</div>' +
       '<div class="info">' +
         '<div class="name-row">' +
@@ -545,6 +581,74 @@ document.getElementById('f-source').addEventListener('change', onFilterChange);
 document.getElementById('f-ai').addEventListener('change', onFilterChange);
 document.getElementById('f-size').addEventListener('change', onFilterChange);
 document.getElementById('f-type').addEventListener('change', onFilterChange);
+
+// ── Batch selection ──────────────────────────────────────────────
+
+function updateBatchBar() {
+  const bar = document.getElementById('batchBar');
+  const n = selectedPhones.size;
+  document.getElementById('batchCount').textContent = n + ' selected';
+  bar.classList.toggle('show', n > 0);
+  document.getElementById('selectAll').checked = false;
+  if (n > 0) {
+    const page = getFiltered().slice((currentPage-1)*PAGE_SIZE, currentPage*PAGE_SIZE);
+    const allChecked = page.every(c => selectedPhones.has(c.phone));
+    document.getElementById('selectAll').checked = allChecked;
+  }
+}
+
+function toggleSelect(el) {
+  const phone = el.dataset.phone;
+  if (el.checked) selectedPhones.add(phone);
+  else selectedPhones.delete(phone);
+  updateBatchBar();
+}
+
+function toggleSelectAll(checked) {
+  const page = getFiltered().slice((currentPage-1)*PAGE_SIZE, currentPage*PAGE_SIZE);
+  page.forEach(c => {
+    if (checked) selectedPhones.add(c.phone);
+    else selectedPhones.delete(c.phone);
+  });
+  render();
+  updateBatchBar();
+}
+
+function clearSelection() {
+  selectedPhones.clear();
+  document.getElementById('batchSize').value = '';
+  render();
+  updateBatchBar();
+}
+
+async function batchAction(action, value) {
+  const phones = Array.from(selectedPhones);
+  if (!phones.length) return;
+  const label = action === 'enable_ai' ? 'Enable AI' : action === 'disable_ai' ? 'Disable AI' : 'Set Size=' + (value||'clear');
+  if (!confirm(label + ' for ' + phones.length + ' customers?')) {
+    document.getElementById('batchSize').value = '';
+    return;
+  }
+  try {
+    const res = await fetch('/api/v1/ai/batch', {
+      method: 'POST',
+      headers: _authHeaders(),
+      body: JSON.stringify({ phones, action, value: value || '' }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || res.statusText);
+    // Update local state
+    if (action === 'enable_ai') phones.forEach(p => { const c = customers.find(x=>x.phone===p); if(c) c.ai_disabled=0; });
+    if (action === 'disable_ai') phones.forEach(p => { const c = customers.find(x=>x.phone===p); if(c) c.ai_disabled=1; });
+    if (action === 'set_size') phones.forEach(p => { const c = customers.find(x=>x.phone===p); if(c) c.customer_size=value||''; });
+    clearSelection();
+    updateStats();
+    render();
+  } catch(e) {
+    alert('Batch failed: ' + e.message);
+  }
+  document.getElementById('batchSize').value = '';
+}
 
 loadCustomers();
 </script>

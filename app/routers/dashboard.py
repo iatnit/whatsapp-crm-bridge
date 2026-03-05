@@ -1,9 +1,11 @@
 """Customer analytics dashboard routes."""
 
+import csv
+import io
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Query
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 
 from app.auth import verify_admin
 
@@ -92,6 +94,106 @@ async def search_messages(
             results.append(r)
 
     return {"query": q, "results": results}
+
+
+# ── CSV Export ────────────────────────────────────────────────────────
+
+_CSV_BOM = "\ufeff"  # BOM for Excel UTF-8 compatibility
+
+
+@router.get("/api/v1/export/customers", dependencies=[Depends(verify_admin)])
+async def export_customers():
+    """Export all customers as CSV."""
+    from app.store.database import get_db
+
+    async with get_db() as db:
+        cursor = await db.execute(
+            "SELECT * FROM conversations ORDER BY last_message_at DESC"
+        )
+        rows = await cursor.fetchall()
+
+    output = io.StringIO()
+    output.write(_CSV_BOM)
+    writer = csv.writer(output)
+    writer.writerow([
+        "phone", "display_name", "customer_name", "match_status",
+        "customer_tier", "customer_size", "location", "total_messages",
+        "first_message_at", "last_message_at", "intent_priority",
+        "intent_tags", "ai_disabled", "customer_stage", "product_interest",
+    ])
+    for r in rows:
+        row = dict(r)
+        writer.writerow([
+            row.get("phone", ""), row.get("display_name", ""),
+            row.get("customer_name", ""), row.get("match_status", ""),
+            row.get("customer_tier", ""), row.get("customer_size", ""),
+            row.get("location", ""), row.get("total_messages", 0),
+            row.get("first_message_at", ""), row.get("last_message_at", ""),
+            row.get("intent_priority", ""), row.get("intent_tags", ""),
+            row.get("ai_disabled", 0), row.get("customer_stage", ""),
+            row.get("product_interest", ""),
+        ])
+
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": "attachment; filename=customers.csv"},
+    )
+
+
+@router.get("/api/v1/export/messages", dependencies=[Depends(verify_admin)])
+async def export_messages(phone: str = Query(default="")):
+    """Export messages as CSV. Optional phone filter."""
+    from app.store.database import get_db
+
+    async with get_db() as db:
+        if phone:
+            cursor = await db.execute(
+                "SELECT * FROM messages WHERE phone = ? ORDER BY timestamp",
+                (phone,),
+            )
+        else:
+            cursor = await db.execute(
+                "SELECT * FROM messages ORDER BY timestamp DESC LIMIT 10000"
+            )
+        rows = await cursor.fetchall()
+
+    output = io.StringIO()
+    output.write(_CSV_BOM)
+    writer = csv.writer(output)
+    writer.writerow(["phone", "display_name", "direction", "msg_type",
+                     "content", "timestamp", "media_path"])
+    for r in rows:
+        row = dict(r)
+        writer.writerow([
+            row.get("phone", ""), row.get("display_name", ""),
+            row.get("direction", ""), row.get("msg_type", ""),
+            row.get("content", ""), row.get("timestamp", ""),
+            row.get("media_path", ""),
+        ])
+
+    filename = f"messages_{phone}.csv" if phone else "messages_all.csv"
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+# ── Audit Log ─────────────────────────────────────────────────────────
+
+@router.get("/audit", response_class=HTMLResponse, dependencies=[Depends(verify_admin)])
+async def audit_page():
+    """Audit log page."""
+    return HTMLResponse(_load_html("audit.html"))
+
+
+@router.get("/api/v1/audit/logs", dependencies=[Depends(verify_admin)])
+async def audit_logs(limit: int = Query(default=200, le=1000)):
+    """Return recent audit log entries."""
+    from app.store.audit import get_recent_logs
+    logs = await get_recent_logs(limit)
+    return {"count": len(logs), "logs": logs}
 
 
 # ── HTML file loading ────────────────────────────────────────────────
