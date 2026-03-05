@@ -53,6 +53,76 @@ async def customer_detail_api(phone: str):
     return {"profile": profile, "messages": messages}
 
 
+# ── Editable fields: local fields + HubSpot-synced fields ────────────
+
+# Fields stored in local conversations table
+_LOCAL_FIELDS = {
+    "customer_name", "display_name", "location", "customer_size",
+    "customer_tier", "product_interest", "customer_stage", "intent_priority",
+}
+
+# Map from local field name to HubSpot property name
+_HUBSPOT_FIELD_MAP = {
+    "customer_name": "firstname",   # will split to firstname/lastname
+    "location": "country",
+    "customer_tier": "customer_tier",
+    "product_interest": "product_interest",
+    "customer_stage": "customer_stage",
+}
+
+
+@router.post("/api/v1/customer/{phone}/update", dependencies=[Depends(verify_admin)])
+async def update_customer_profile(phone: str, payload: dict):
+    """Update customer profile fields and sync to HubSpot.
+
+    Body: {"customer_name": "John", "location": "India", ...}
+    Only provided keys are updated; missing keys are left unchanged.
+    """
+    from app.store.database import get_db
+    from app.store.audit import log_action
+
+    # Filter to valid fields only
+    updates = {k: v for k, v in payload.items() if k in _LOCAL_FIELDS}
+    if not updates:
+        return {"error": "No valid fields to update"}, 400
+
+    # Update local SQLite
+    async with get_db() as db:
+        for field, value in updates.items():
+            await db.execute(
+                f"UPDATE conversations SET {field} = ? WHERE phone = ?",
+                (value, phone),
+            )
+        await db.commit()
+
+    # Sync to HubSpot if contact exists
+    hs_synced = False
+    try:
+        from app.writers.hubspot_writer import search_contact_by_phone, update_contact
+        contact_id = await search_contact_by_phone(phone)
+        if contact_id:
+            hs_props = {}
+            for field, value in updates.items():
+                hs_key = _HUBSPOT_FIELD_MAP.get(field)
+                if hs_key and value:
+                    if field == "customer_name":
+                        parts = value.strip().split(maxsplit=1)
+                        hs_props["firstname"] = parts[0]
+                        if len(parts) > 1:
+                            hs_props["lastname"] = parts[1]
+                    else:
+                        hs_props[hs_key] = value
+            if hs_props:
+                hs_synced = await update_contact(contact_id, extra=hs_props)
+    except Exception:
+        pass  # HubSpot sync is best-effort
+
+    changed = ", ".join(f"{k}={v}" for k, v in updates.items())
+    await log_action("update_profile", phone, changed)
+
+    return {"status": "ok", "phone": phone, "updated": list(updates.keys()), "hubspot_synced": hs_synced}
+
+
 @router.get("/api/v1/dashboard/search", dependencies=[Depends(verify_admin)])
 async def search_messages(
     q: str = Query(..., min_length=1),
