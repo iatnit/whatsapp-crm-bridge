@@ -11,7 +11,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .nav a.active{color:#fff;background:#2563eb}
 .container{max-width:960px;margin:0 auto;padding:24px}
 .profile{background:#fff;border-radius:12px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,.08);margin-bottom:20px}
-.profile h1{font-size:1.4rem;color:#0f172a;margin-bottom:12px}
+.profile h1{font-size:1.4rem;color:#0f172a;margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .profile-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 24px}
 .profile-item{font-size:.875rem;color:#64748b}
 .profile-item span{color:#1e293b;font-weight:500}
@@ -19,9 +19,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .S{background:#fef2f2;color:#dc2626}.A{background:#fffbeb;color:#d97706}
 .B{background:#eff6ff;color:#2563eb}.C{background:#f1f5f9;color:#475569}
 .D{background:#f8fafc;color:#94a3b8}
-.chat{background:#fff;border-radius:12px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
-.chat h2{font-size:1.1rem;color:#0f172a;margin-bottom:16px}
-.chat-list{max-height:600px;overflow-y:auto;display:flex;flex-direction:column;gap:6px}
+.stage-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:.7rem;font-weight:600;background:#ede9fe;color:#5b21b6}
+.chat{background:#fff;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.08);display:flex;flex-direction:column}
+.chat-header{padding:16px 24px;border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between;align-items:center}
+.chat-header h2{font-size:1.1rem;color:#0f172a}
+.chat-header .msg-count{color:#94a3b8;font-size:.85rem}
+.chat-list{max-height:500px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding:20px 24px}
 .msg{max-width:75%;padding:10px 14px;border-radius:12px;font-size:.875rem;line-height:1.4;word-break:break-word}
 .msg.inbound{background:#e2e8f0;align-self:flex-start;border-bottom-left-radius:4px}
 .msg.outbound{background:#2563eb;color:#fff;align-self:flex-end;border-bottom-right-radius:4px}
@@ -29,8 +32,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .msg.outbound .meta{color:rgba(255,255,255,.7)}
 .msg .media-tag{font-style:italic;opacity:.7}
 .day-sep{text-align:center;font-size:.75rem;color:#94a3b8;padding:8px 0}
+.compose{padding:16px 24px;border-top:1px solid #f1f5f9;display:flex;gap:8px}
+.compose textarea{flex:1;padding:10px 14px;border:1px solid #d1d7db;border-radius:8px;font-size:14px;font-family:inherit;outline:none;resize:none;min-height:42px;max-height:120px}
+.compose textarea:focus{border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+.compose button{padding:10px 20px;background:#25d366;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap}
+.compose button:hover{background:#128c7e}
+.compose button:disabled{opacity:.5;cursor:wait}
+.send-status{font-size:.75rem;padding:4px 24px;color:#64748b}
+.send-status.error{color:#dc2626}
 .loading{text-align:center;color:#94a3b8;padding:40px}
-@media(max-width:768px){.profile-grid{grid-template-columns:1fr}.msg{max-width:90%}}
+.back-link{display:inline-flex;align-items:center;gap:4px;color:#2563eb;text-decoration:none;font-size:.85rem;margin-bottom:16px}
+.back-link:hover{text-decoration:underline}
+@media(max-width:768px){.profile-grid{grid-template-columns:1fr}.msg{max-width:90%}.container{padding:12px}}
 </style></head><body>
 <nav class="nav">
   <a href="/dashboard">Dashboard</a>
@@ -38,45 +51,69 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <a href="/logout" style="margin-left:auto">Logout</a>
 </nav>
 <div class="container">
+  <a href="/dashboard" class="back-link">&larr; Back to Dashboard</a>
   <div class="profile" id="profile"><div class="loading">Loading...</div></div>
   <div class="chat">
-    <h2>Message History</h2>
+    <div class="chat-header">
+      <h2>Message History</h2>
+      <span class="msg-count" id="msgCount"></span>
+    </div>
     <div class="chat-list" id="chatList"><div class="loading">Loading...</div></div>
+    <div class="send-status" id="sendStatus"></div>
+    <div class="compose">
+      <textarea id="msgInput" placeholder="Type a message..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMsg()}"></textarea>
+      <button id="sendBtn" onclick="sendMsg()">Send</button>
+    </div>
   </div>
 </div>
 <script>
-const phone = location.pathname.split('/').pop();
+const phone = decodeURIComponent(location.pathname.split('/').pop());
+function esc(s){const d=document.createElement('div');d.textContent=s||'';return d.innerHTML}
 function fmtTime(ts){
-  const d = new Date(ts*1000);
-  return d.toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+  return new Date(ts*1000).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
 }
 function fmtDate(ts){
   return new Date(ts*1000).toLocaleDateString('zh-CN',{year:'numeric',month:'2-digit',day:'2-digit'});
 }
+
+let allMessages = [];
+
 async function load(){
   const d = await fetch('/api/v1/customer/'+encodeURIComponent(phone)).then(r=>r.json());
   const p = d.profile;
+  if(!p || !p.phone){
+    document.getElementById('profile').innerHTML='<div class="loading">Customer not found</div>';
+    return;
+  }
   const tier = p.customer_tier;
-  const tierBadge = tier ? `<span class="badge ${tier}">${tier}</span>` : '<span style="color:#cbd5e1">-</span>';
+  const tierBadge = tier ? `<span class="badge ${tier}">${tier}</span>` : '';
+  const stageBadge = p.customer_stage ? `<span class="stage-badge">${esc(p.customer_stage)}</span>` : '';
 
   document.getElementById('profile').innerHTML = `
-    <h1>${p.customer_name || p.display_name || p.phone} ${tierBadge}</h1>
+    <h1>${esc(p.customer_name || p.display_name || p.phone)} ${tierBadge} ${stageBadge}</h1>
     <div class="profile-grid">
-      <div class="profile-item">Phone: <span>${p.phone}</span></div>
-      <div class="profile-item">Display Name: <span>${p.display_name||'-'}</span></div>
-      <div class="profile-item">Location: <span>${p.location||'-'}</span></div>
-      <div class="profile-item">Size: <span>${p.customer_size||'-'}</span></div>
-      <div class="profile-item">Match: <span>${p.match_status||'-'}</span></div>
+      <div class="profile-item">Phone: <span>+${esc(p.phone)}</span></div>
+      <div class="profile-item">Display Name: <span>${esc(p.display_name)||'-'}</span></div>
+      <div class="profile-item">Location: <span>${esc(p.location)||'-'}</span></div>
+      <div class="profile-item">Size: <span>${esc(p.customer_size)||'-'}</span></div>
+      <div class="profile-item">Match: <span>${esc(p.match_status)||'-'}</span></div>
       <div class="profile-item">Messages: <span>${p.total_messages||0}</span></div>
       <div class="profile-item">First Contact: <span>${p.first_message_at ? p.first_message_at.substring(0,10) : '-'}</span></div>
       <div class="profile-item">Last Contact: <span>${p.last_message_at ? p.last_message_at.substring(0,10) : '-'}</span></div>
-      <div class="profile-item">Priority: <span>${p.intent_priority||'-'}</span></div>
-      <div class="profile-item">Product Interest: <span>${p.product_interest||'-'}</span></div>
-      <div class="profile-item">Tags: <span>${p.intent_tags||'-'}</span></div>
+      <div class="profile-item">Priority: <span>${esc(p.intent_priority)||'-'}</span></div>
+      <div class="profile-item">Product Interest: <span>${esc(p.product_interest)||'-'}</span></div>
+      <div class="profile-item">Tags: <span>${esc(p.intent_tags)||'-'}</span></div>
       <div class="profile-item">AI Reply: <span>${p.ai_disabled ? 'Disabled' : 'Enabled'}</span></div>
     </div>`;
 
-  const msgs = d.messages;
+  document.title = (p.customer_name || p.display_name || p.phone) + ' — CRM';
+  allMessages = d.messages;
+  renderMessages();
+}
+
+function renderMessages(){
+  const msgs = allMessages;
+  document.getElementById('msgCount').textContent = msgs.length + ' messages';
   if(!msgs.length){
     document.getElementById('chatList').innerHTML='<div class="loading">No messages</div>';
     return;
@@ -89,9 +126,9 @@ async function load(){
       html+=`<div class="day-sep">${date}</div>`;
       lastDate=date;
     }
-    let content = m.content||'';
+    let content = esc(m.content||'');
     if(m.msg_type!=='text'){
-      content = content ? `<span class="media-tag">[${m.msg_type}]</span> ${content}` : `<span class="media-tag">[${m.msg_type}]</span>`;
+      content = content ? `<span class="media-tag">[${esc(m.msg_type)}]</span> ${content}` : `<span class="media-tag">[${esc(m.msg_type)}]</span>`;
     }
     html+=`<div class="msg ${m.direction}">
       ${content}
@@ -99,9 +136,52 @@ async function load(){
     </div>`;
   }
   document.getElementById('chatList').innerHTML=html;
-  // Scroll to bottom
   const cl=document.getElementById('chatList');
   cl.scrollTop=cl.scrollHeight;
 }
+
+async function sendMsg(){
+  const input = document.getElementById('msgInput');
+  const text = input.value.trim();
+  if(!text) return;
+  const btn = document.getElementById('sendBtn');
+  const status = document.getElementById('sendStatus');
+  btn.disabled = true;
+  status.textContent = 'Sending...';
+  status.className = 'send-status';
+  try{
+    const res = await fetch('/send', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({to: phone, text: text})
+    });
+    const data = await res.json();
+    if(data.status === 'sent'){
+      input.value = '';
+      status.textContent = 'Sent!';
+      // Add message to local list immediately
+      allMessages.push({
+        direction: 'outbound', msg_type: 'text',
+        content: text, timestamp: Math.floor(Date.now()/1000)
+      });
+      renderMessages();
+      setTimeout(()=>{status.textContent=''},2000);
+    } else {
+      status.textContent = 'Failed: ' + (data.error || 'unknown error');
+      status.className = 'send-status error';
+    }
+  } catch(e) {
+    status.textContent = 'Error: ' + e.message;
+    status.className = 'send-status error';
+  }
+  btn.disabled = false;
+}
+
+// Auto-resize textarea
+document.getElementById('msgInput').addEventListener('input', function(){
+  this.style.height = 'auto';
+  this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+});
+
 load();
 </script></body></html>

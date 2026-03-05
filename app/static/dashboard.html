@@ -149,4 +149,8 @@ async function load(){
   document.getElementById('ts').textContent='Updated: '+new Date().toLocaleString('zh-CN');
 }
 load();
+// Auto-refresh every 60 seconds
+setInterval(()=>{
+  load().catch(()=>{});
+},60000);
 </script></body></html>

@@ -96,14 +96,18 @@ async def search_messages(
 
 # ── HTML file loading ────────────────────────────────────────────────
 
-_html_cache: dict[str, str] = {}
+_html_cache: dict[str, tuple[str, float]] = {}  # filename → (content, mtime)
 
 
 def _load_html(filename: str) -> str:
-    if filename not in _html_cache:
-        path = _STATIC_DIR / filename
-        if path.exists():
-            _html_cache[filename] = path.read_text()
-        else:
-            _html_cache[filename] = f"<html><body><h1>{filename} — file missing</h1></body></html>"
-    return _html_cache[filename]
+    """Load HTML with mtime-based cache (auto-refresh on file change)."""
+    path = _STATIC_DIR / filename
+    if not path.exists():
+        return f"<html><body><h1>{filename} — file missing</h1></body></html>"
+    mtime = path.stat().st_mtime
+    cached = _html_cache.get(filename)
+    if cached and cached[1] == mtime:
+        return cached[0]
+    content = path.read_text()
+    _html_cache[filename] = (content, mtime)
+    return content

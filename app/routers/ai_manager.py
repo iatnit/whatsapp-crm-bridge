@@ -72,18 +72,18 @@ async def refresh_hubspot_contacts() -> list[dict]:
 
 # ── AI Manager page ──────────────────────────────────────────────────
 
-_ai_manager_html: str | None = None
+_ai_manager_cache: tuple[str, float] | None = None
+_AI_MANAGER_PATH = Path(__file__).parent.parent / "static" / "ai-manager.html"
 
 
 @router.get("/ai-manager", response_class=HTMLResponse, dependencies=[Depends(verify_admin)])
 async def ai_manager_page():
     """Serve the AI Manager single-page UI."""
-    global _ai_manager_html
-    if _ai_manager_html is None:
-        _ai_manager_html = (
-            Path(__file__).parent.parent / "static" / "ai-manager.html"
-        ).read_text()
-    return _ai_manager_html
+    global _ai_manager_cache
+    mtime = _AI_MANAGER_PATH.stat().st_mtime
+    if _ai_manager_cache is None or _ai_manager_cache[1] != mtime:
+        _ai_manager_cache = (_AI_MANAGER_PATH.read_text(), mtime)
+    return _ai_manager_cache[0]
 
 
 # ── Customer list (merged local + HubSpot) ───────────────────────────

@@ -403,7 +403,7 @@ function render() {
       '<div class="avatar">' + initials(c) + '</div>' +
       '<div class="info">' +
         '<div class="name-row">' +
-          '<div class="name">' + esc(name) + '</div>' +
+          '<a class="name" href="/customer/' + encodeURIComponent(c.phone) + '" style="color:#111b21;text-decoration:none" onmouseover="this.style.color=\'#2563eb\'" onmouseout="this.style.color=\'#111b21\'">' + esc(name) + '</a>' +
           prioBadge + aiBadge + sizeBadge + sourceBadge(c.source) +
         '</div>' +
         '<div class="phone">+' + esc(c.phone) + '</div>' +
