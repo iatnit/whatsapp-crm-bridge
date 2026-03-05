@@ -75,6 +75,12 @@ class Settings(BaseSettings):
     dormant_outreach_days: int = 30    # inactivity threshold for dormant outreach
     dormant_outreach_interval_days: int = 15  # run dormant outreach every N days (0 = disabled)
 
+    # --- Dormant Outreach ---
+    # Set to the WATI template name to auto-send WhatsApp to dormant customers.
+    # Leave empty to only send Feishu drafts (manual mode).
+    wati_dormant_template: str = ""
+    wati_dormant_auto_send: bool = False  # master switch for auto WhatsApp send
+
     # --- App ---
     log_level: str = "INFO"
     daily_analysis_hour: int = 23

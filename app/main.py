@@ -210,12 +210,32 @@ async def lifespan(app: FastAPI):
         )
         logger.info("CEO weekly report enabled: Monday 09:00 CST → Feishu CEO周报")
 
+    # Feishu → crm_customers.json sync (every 4 hours + at startup)
+    if settings.feishu_app_token and settings.feishu_table_customers:
+        from app.matcher.customer_matcher import sync_from_feishu
+        scheduler.add_job(
+            sync_from_feishu,
+            "interval",
+            hours=4,
+            id="feishu_customer_sync",
+        )
+        logger.info("Feishu customer sync enabled: every 4 hours")
+
     scheduler.start()
     logger.info(
         "App started. Daily analysis scheduled at %02d:%02d",
         settings.daily_analysis_hour,
         settings.daily_analysis_minute,
     )
+
+    # Sync Feishu customers to crm_customers.json at startup
+    if settings.feishu_app_token and settings.feishu_table_customers:
+        try:
+            from app.matcher.customer_matcher import sync_from_feishu
+            count = await sync_from_feishu()
+            logger.info("Startup: Feishu customer sync complete (%d customers)", count)
+        except Exception:
+            logger.warning("Startup: Feishu customer sync failed, using existing crm_customers.json")
 
     # Load HubSpot cache from disk (instant); fetch from API only if no local file
     try:

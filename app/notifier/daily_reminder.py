@@ -244,6 +244,38 @@ async def send_hot_leads_alert(results: list[dict]) -> bool:
     return await _send_feishu_webhook(title, lines)
 
 
+async def send_sample_request_alert(customer_name: str, phone: str, analysis: dict) -> bool:
+    """Send immediate Feishu alert when a customer requests a sample.
+
+    Called fire-and-forget from daily_pipeline after LLM analysis detects
+    sample_requested=true.
+    """
+    if not settings.feishu_webhook_url:
+        return False
+
+    demand = analysis.get("demand_summary", "") or analysis.get("summary", "")
+    products = analysis.get("recommended_codes", [])
+    next_actions = analysis.get("next_actions", {})
+    today_action = next_actions.get("today", "") if isinstance(next_actions, dict) else ""
+
+    cst = timezone(timedelta(hours=8))
+    now_str = datetime.now(cst).strftime("%H:%M")
+
+    lines: list[list[dict]] = [
+        [{"tag": "text", "text": f"客户: {customer_name or phone}  ({phone})"}],
+    ]
+    if demand:
+        lines.append([{"tag": "text", "text": f"需求: {demand}"}])
+    if products:
+        lines.append([{"tag": "text", "text": f"相关产品: {', '.join(products)}"}])
+    if today_action:
+        lines.append([{"tag": "text", "text": f"建议动作: {today_action}"}])
+    else:
+        lines.append([{"tag": "text", "text": "建议动作: 确认样品规格，安排寄样"}])
+
+    return await _send_feishu_webhook(f"📦 样品请求 — {customer_name or phone} ({now_str})", lines)
+
+
 async def send_pipeline_error_alert(errors: list[str], analyzed: int) -> bool:
     """Send Feishu alert when pipeline encounters significant errors."""
     if not settings.feishu_webhook_url:

@@ -267,6 +267,14 @@ async def run_daily_pipeline() -> dict:
             feishu_name = matched_name or claude_name or display_name or phone
             location = analysis.get("customer_info", {}).get("location", "")
 
+            # Fire immediate alert if customer requested a sample
+            if analysis.get("crm_fields", {}).get("sample_requested"):
+                try:
+                    from app.notifier.daily_reminder import send_sample_request_alert
+                    asyncio.create_task(send_sample_request_alert(feishu_name, phone, analysis))
+                except Exception as e:
+                    logger.warning("Sample alert task failed for %s: %s", feishu_name, e)
+
             # Cache location to SQLite
             if location:
                 from app.store.conversations import update_location

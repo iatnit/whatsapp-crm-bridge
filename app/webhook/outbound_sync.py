@@ -6,6 +6,7 @@ outbound replies sent by Lucky from the WATI dashboard or phone, and
 writes them to the local DB + forwards to the Obsidian receiver.
 """
 
+import asyncio
 import logging
 import time
 
@@ -20,39 +21,59 @@ logger = logging.getLogger(__name__)
 # How far back to look for new messages on each sync (seconds)
 _LOOKBACK_SECONDS = 600  # 10 minutes (covers 2× the 5-min interval)
 
+# Throttle: delay between each phone's API call to avoid WATI 429
+_INTER_REQUEST_DELAY = 0.5  # seconds between WATI calls
+
+# Only sync conversations active in the last 2 days (not 7) to reduce API call volume
+_ACTIVE_WINDOW_DAYS = 2
+
 
 async def _get_active_phones() -> list[dict]:
-    """Return conversations active in the last 7 days."""
+    """Return conversations active in the last _ACTIVE_WINDOW_DAYS days."""
     async with get_db() as db:
         cursor = await db.execute(
-            """
+            f"""
             SELECT phone, display_name, customer_name
             FROM conversations
-            WHERE last_message_at >= datetime('now', '-7 days')
+            WHERE last_message_at >= datetime('now', '-{_ACTIVE_WINDOW_DAYS} days')
             ORDER BY last_message_at DESC
             """,
         )
         return [dict(row) for row in await cursor.fetchall()]
 
 
+class _RateLimited(Exception):
+    """Raised when WATI returns 429 to short-circuit the sync loop."""
+
+
 async def _fetch_wati_messages(phone: str) -> list[dict]:
-    """Call WATI getMessages API for the given phone, return raw items."""
+    """Call WATI getMessages API for the given phone, return raw items.
+
+    Raises _RateLimited on 429 so the caller can stop processing more phones.
+    """
     url = f"{settings.wati_v1_url}/api/v1/getMessages/{phone}?pageSize=50"
     headers = {"Authorization": f"Bearer {settings.wati_api_token}"}
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.get(url, headers=headers)
+        if resp.status_code == 429:
+            raise _RateLimited(phone)
         if resp.status_code != 200:
             logger.debug("WATI getMessages %s → HTTP %d", phone, resp.status_code)
             return []
         return resp.json().get("messages", {}).get("items", []) or []
+    except _RateLimited:
+        raise
     except Exception as e:
         logger.warning("WATI getMessages failed for %s: %s", phone, e)
         return []
 
 
 async def _sync_phone(phone: str, display_name: str, customer_name: str) -> int:
-    """Sync outbound messages for one phone. Returns count of new messages saved."""
+    """Sync outbound messages for one phone. Returns count of new messages saved.
+
+    Propagates _RateLimited so the outer loop can stop early.
+    """
     items = await _fetch_wati_messages(phone)
     cutoff = int(time.time()) - _LOOKBACK_SECONDS
     saved = 0
@@ -120,13 +141,24 @@ async def sync_outbound_messages() -> None:
         return
 
     total = 0
+    processed = 0
     for conv in conversations:
-        count = await _sync_phone(
-            phone=conv["phone"],
-            display_name=conv.get("display_name", ""),
-            customer_name=conv.get("customer_name", ""),
-        )
-        total += count
+        try:
+            count = await _sync_phone(
+                phone=conv["phone"],
+                display_name=conv.get("display_name", ""),
+                customer_name=conv.get("customer_name", ""),
+            )
+            total += count
+            processed += 1
+        except _RateLimited as e:
+            logger.warning(
+                "Outbound sync: WATI rate limited (429) at %s — stopping early (%d/%d done)",
+                e, processed, len(conversations),
+            )
+            break
+        # Throttle between calls to stay within WATI rate limits
+        await asyncio.sleep(_INTER_REQUEST_DELAY)
 
     if total:
         logger.info("Outbound sync: saved %d new message(s) across %d conversation(s)",

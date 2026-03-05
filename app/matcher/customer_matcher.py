@@ -10,6 +10,9 @@ from app.store.conversations import update_customer_match
 
 logger = logging.getLogger(__name__)
 
+# Minimum customers expected — if Feishu returns fewer, skip overwrite (safety)
+_MIN_CUSTOMERS_THRESHOLD = 10
+
 # customer DB: {"customer_id": "customer_name", ...}
 _customer_db: dict[str, str] = {}
 
@@ -90,6 +93,52 @@ async def match_conversation(phone: str, display_name: str) -> dict | None:
         display_name, phone, best_name, best_id, score * 100,
     )
     return {"customer_id": best_id, "customer_name": best_name, "score": score}
+
+
+async def sync_from_feishu() -> int:
+    """Fetch all customers from Feishu and update crm_customers.json + in-memory DB.
+
+    Runs at startup and every 4 hours so new Feishu customers are immediately
+    available for fuzzy matching without manual file updates.
+
+    Returns the number of customers now in the DB.
+    """
+    global _customer_db
+
+    try:
+        from app.writers.feishu_writer import list_customers_with_feishu_id
+        customers = await list_customers_with_feishu_id()
+    except Exception as e:
+        logger.error("Failed to fetch customers from Feishu: %s", e)
+        return len(_customer_db)
+
+    if len(customers) < _MIN_CUSTOMERS_THRESHOLD:
+        logger.warning(
+            "Feishu returned only %d customers (< %d threshold) — skipping crm_customers.json update",
+            len(customers), _MIN_CUSTOMERS_THRESHOLD,
+        )
+        return len(_customer_db)
+
+    new_db = {c["feishu_id"]: c["name"] for c in customers if c.get("feishu_id") and c.get("name")}
+
+    path: Path = settings.customers_json
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(new_db, ensure_ascii=False, indent=2), encoding="utf-8")
+    except OSError as e:
+        logger.error("Failed to write crm_customers.json: %s", e)
+        # Still update in-memory even if disk write fails
+        _customer_db = new_db
+        return len(_customer_db)
+
+    prev_count = len(_customer_db)
+    _customer_db = new_db
+    added = len(new_db) - prev_count
+    logger.info(
+        "Feishu customer sync: %d customers loaded (+%d new), saved to %s",
+        len(new_db), max(added, 0), path,
+    )
+    return len(_customer_db)
 
 
 async def match_all_unmatched() -> list[dict]:
