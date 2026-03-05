@@ -43,7 +43,32 @@ tr:hover td{background:#f8fafc}
 .sr-dir{font-size:.7rem;padding:2px 6px;border-radius:4px;font-weight:600}
 .sr-dir.inbound{background:#e2e8f0;color:#475569}
 .sr-dir.outbound{background:#dbeafe;color:#2563eb}
-@media(max-width:768px){.kpis,.grid{grid-template-columns:1fr}}
+@media(max-width:768px){
+  body{padding:12px}
+  .nav{padding:8px 12px;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .nav a{font-size:12px;padding:5px 8px;white-space:nowrap;flex-shrink:0}
+  h1{font-size:1.2rem;margin-bottom:12px}
+  .kpis{grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px}
+  .kpi{padding:12px 8px;border-radius:8px}
+  .kpi .n{font-size:1.5rem}
+  .kpi .l{font-size:.75rem}
+  .grid{grid-template-columns:1fr;gap:12px}
+  .card{padding:14px;border-radius:8px}
+  .card[style*="grid-column"]{grid-column:auto!important}
+  .search-box input{padding:8px 12px;font-size:13px}
+  .search-box button{padding:8px 14px;font-size:13px}
+  .search-results{padding:12px}
+  .sr-item{padding:8px 6px;gap:8px}
+  .sr-name{min-width:80px;font-size:.85rem}
+  .sr-content{font-size:.8rem}
+  th,td{padding:6px 6px;font-size:.8rem}
+  .hide-mobile{display:none}
+}
+@media(max-width:400px){
+  body{padding:8px}
+  .kpis{gap:8px}
+  .kpi .n{font-size:1.3rem}
+}
 </style></head><body>
 <nav class="nav">
   <a class="active" href="#" onclick="return false">Dashboard</a>
@@ -52,7 +77,7 @@ tr:hover td{background:#f8fafc}
   <a href="/api/v1/export/customers" style="font-size:12px">Export CSV</a>
   <a href="/logout" style="margin-left:auto">Logout</a>
 </nav>
-<h1 style="margin-top:20px">LOCACRYSTAL CRM</h1>
+<h1 style="margin-top:12px">LOCACRYSTAL CRM</h1>
 
 <div class="search-box">
   <input type="text" id="searchInput" placeholder="Search messages or customers..." onkeydown="if(event.key==='Enter')doSearch()">
@@ -71,7 +96,7 @@ tr:hover td{background:#f8fafc}
   <div class="card" style="grid-column:span 2">
     <h3>Top 30</h3>
     <div style="max-height:520px;overflow-y:auto">
-    <table><thead><tr><th>#</th><th>Name</th><th>Phone</th><th>Tier</th><th>City</th><th>Msgs</th><th>Last</th></tr></thead>
+    <table><thead><tr><th>#</th><th>Name</th><th class="hide-mobile">Phone</th><th>Tier</th><th class="hide-mobile">City</th><th>Msgs</th><th>Last</th></tr></thead>
     <tbody id="topTb"></tbody></table>
     </div>
   </div>
@@ -146,7 +171,7 @@ async function load(){
   // Top 30 — clickable rows
   document.getElementById('topTb').innerHTML=d.top_customers.map((c,i)=>{
     const badge=c.tier?`<span class="badge ${c.tier}">${c.tier}</span>`:'<span style="color:#cbd5e1">-</span>';
-    return `<tr class="clickable" onclick="goCustomer('${c.phone}')"><td style="color:#94a3b8">${i+1}</td><td>${c.name}</td><td style="font-family:monospace;color:#64748b">${c.phone_short}</td><td>${badge}</td><td>${c.city||'-'}</td><td>${c.msgs}</td><td>${c.last_contact||'-'}</td></tr>`;
+    return `<tr class="clickable" onclick="goCustomer('${c.phone}')"><td style="color:#94a3b8">${i+1}</td><td>${c.name}</td><td class="hide-mobile" style="font-family:monospace;color:#64748b">${c.phone_short}</td><td>${badge}</td><td class="hide-mobile">${c.city||'-'}</td><td>${c.msgs}</td><td>${c.last_contact||'-'}</td></tr>`;
   }).join('');
   document.getElementById('ts').textContent='Updated: '+new Date().toLocaleString('zh-CN');
 }

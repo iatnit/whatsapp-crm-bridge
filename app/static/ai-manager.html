@@ -7,6 +7,10 @@
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f0f2f5; color: #111b21; }
+.topnav { background: #0f172a; padding: 10px 24px; display: flex; gap: 16px; align-items: center; }
+.topnav a { color: #94a3b8; text-decoration: none; font-size: 14px; font-weight: 500; padding: 6px 12px; border-radius: 6px; transition: all .15s; white-space: nowrap; flex-shrink: 0; }
+.topnav a:hover { color: #fff; background: rgba(255,255,255,.1); }
+.topnav a.active { color: #fff; background: #2563eb; }
 .header { background: #008069; color: #fff; padding: 16px 20px; position: sticky; top: 0; z-index: 10; display: flex; justify-content: space-between; align-items: center; }
 .header-left h1 { font-size: 20px; font-weight: 600; }
 .header-left p { font-size: 12px; opacity: .8; margin-top: 2px; }
@@ -100,23 +104,53 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .pagination button:hover:not(:disabled) { background: #f0f2f5; }
 .pagination button:disabled { opacity: .4; cursor: default; }
 .pagination .page-info { font-size: 13px; color: #667781; }
-@media (max-width: 480px) {
-  .stats { gap: 8px; padding: 10px 14px; }
-  .stat { padding: 6px 10px; font-size: 12px; }
-  .controls { padding: 10px 14px; }
-  .list { padding: 10px 14px; }
-  .card { padding: 12px; gap: 10px; }
-  .avatar { width: 38px; height: 38px; font-size: 16px; }
+@media (max-width: 768px) {
+  .topnav { padding: 8px 12px; gap: 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .topnav a { font-size: 12px; padding: 5px 8px; }
+  .stats { gap: 6px; padding: 10px 12px; overflow-x: auto; -webkit-overflow-scrolling: touch; flex-wrap: nowrap; }
+  .stat { padding: 6px 10px; font-size: 12px; flex-shrink: 0; }
+  .controls { padding: 10px 12px; gap: 8px; }
+  .controls input { min-width: 0; font-size: 13px; padding: 8px 10px; }
+  .controls select { font-size: 13px; padding: 8px 6px; }
+  .list { padding: 10px 12px; }
+  .card { padding: 12px 10px; gap: 10px; }
+  .avatar { width: 36px; height: 36px; font-size: 15px; }
+  .info .name { font-size: 14px; }
+  .info .phone { font-size: 11px; }
+  .badge { font-size: 9px; padding: 1px 5px; }
+  .source-badge { font-size: 9px; padding: 1px 5px; }
+  .hs-chip { font-size: 9px; padding: 1px 5px; }
+  .tag { font-size: 10px; padding: 1px 6px; }
+  .header { padding: 12px 14px; }
+  .header-left h1 { font-size: 17px; }
+  .header-left p { font-size: 11px; }
+  .select-all-row { padding: 6px 12px; font-size: 12px; }
+  .batch-bar { padding: 10px 12px; gap: 8px; }
+  .batch-bar .bcount { font-size: 12px; min-width: 70px; }
+  .batch-bar button { padding: 5px 10px; font-size: 12px; }
+  .batch-bar select { padding: 5px 8px; font-size: 12px; }
+  .pagination { padding: 10px 12px; gap: 8px; }
+  .pagination button { padding: 5px 10px; font-size: 12px; }
+  .toggles { gap: 6px; }
+  .toggle { width: 32px; height: 18px; }
+  .toggle .slider::before { width: 14px; height: 14px; }
+  .toggle input:checked + .slider::before { transform: translateX(14px); }
+  .size-select { font-size: 10px; }
+}
+@media (max-width: 400px) {
+  .card { flex-wrap: wrap; }
+  .toggles { flex-direction: row; width: 100%; justify-content: flex-end; margin-top: 4px; }
+  .info .name-row { gap: 4px; }
 }
 </style>
 </head>
 <body>
 
-<nav style="background:#0f172a;padding:10px 24px;display:flex;gap:16px;align-items:center">
-  <a href="/dashboard" style="color:#94a3b8;text-decoration:none;font-size:14px;font-weight:500;padding:6px 12px;border-radius:6px;transition:all .15s">Dashboard</a>
-  <a href="#" onclick="return false" style="color:#fff;text-decoration:none;font-size:14px;font-weight:500;padding:6px 12px;border-radius:6px;background:#2563eb">AI Manager</a>
-  <a href="/audit" style="color:#94a3b8;text-decoration:none;font-size:14px;font-weight:500;padding:6px 12px;border-radius:6px;transition:all .15s">Audit Log</a>
-  <a href="/logout" style="color:#94a3b8;text-decoration:none;font-size:14px;font-weight:500;padding:6px 12px;border-radius:6px;margin-left:auto;transition:all .15s">Logout</a>
+<nav class="topnav">
+  <a href="/dashboard">Dashboard</a>
+  <a class="active" href="#" onclick="return false">AI Manager</a>
+  <a href="/audit">Audit Log</a>
+  <a href="/logout" style="margin-left:auto">Logout</a>
 </nav>
 
 <div class="header">

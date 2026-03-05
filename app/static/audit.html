@@ -20,6 +20,30 @@ tr:hover td{background:#f8fafc}
 .details{color:#94a3b8;font-size:.8rem;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .time{color:#94a3b8;font-size:.8rem;white-space:nowrap}
 .empty{text-align:center;padding:40px;color:#94a3b8}
+@media(max-width:768px){
+  .nav{padding:8px 12px;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .nav a{font-size:12px;padding:5px 8px;white-space:nowrap;flex-shrink:0}
+  .container{padding:12px}
+  h1{font-size:1.2rem;margin-bottom:10px}
+  table{font-size:.8rem}
+  th,td{padding:8px 8px}
+  .details{max-width:140px}
+  .time{font-size:.7rem}
+  .action{font-size:.8rem}
+  .target{font-size:.7rem}
+}
+@media(max-width:480px){
+  .container{padding:8px}
+  table,thead,tbody,th,td,tr{display:block}
+  thead{display:none}
+  tr{background:#fff;border-radius:8px;padding:10px 12px;margin-bottom:8px;box-shadow:0 1px 3px rgba(0,0,0,.08);display:flex;flex-wrap:wrap;gap:2px 12px}
+  td{padding:0;border:none;font-size:.8rem}
+  td.time{width:100%;color:#94a3b8;font-size:.7rem;order:-1}
+  td.action{font-weight:600;color:#2563eb}
+  td.target{color:#64748b;font-family:monospace;font-size:.75rem}
+  td.details{width:100%;max-width:none;white-space:normal;color:#94a3b8;font-size:.75rem;margin-top:2px}
+  tr:hover td{background:transparent}
+}
 </style></head><body>
 <nav class="nav">
   <a href="/dashboard">Dashboard</a>
