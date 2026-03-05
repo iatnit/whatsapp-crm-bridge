@@ -99,6 +99,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 </head>
 <body>
 
+<nav style="background:#0f172a;padding:10px 24px;display:flex;gap:16px;align-items:center">
+  <a id="nav-dash" href="/dashboard" style="color:#94a3b8;text-decoration:none;font-size:14px;font-weight:500;padding:6px 12px;border-radius:6px;transition:all .15s">Dashboard</a>
+  <a href="#" onclick="return false" style="color:#fff;text-decoration:none;font-size:14px;font-weight:500;padding:6px 12px;border-radius:6px;background:#2563eb">AI Manager</a>
+</nav>
+<script>
+(function(){var t=new URLSearchParams(location.search).get('admin_token');
+if(t)document.getElementById('nav-dash').href='/dashboard?admin_token='+encodeURIComponent(t);})();
+</script>
+
 <div class="header">
   <div class="header-left">
     <h1>AI Manager</h1>
