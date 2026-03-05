@@ -215,7 +215,7 @@ function statClick(key) {
 
 async function loadCustomers() {
   try {
-    const res = await fetch('/api/v1/ai/customers');
+    const res = await fetch('/api/v1/ai/customers', { headers: _authHeaders() });
     if (!res.ok) throw new Error(res.statusText);
     const data = await res.json();
     customers = (data.customers || []).sort((a, b) => {
