@@ -217,12 +217,14 @@ async def _rate_limit_handler(request: Request, exc: RateLimitExceeded):
 
 # ── Include routers ──────────────────────────────────────────────────
 
+from app.auth import router as auth_router                     # noqa: E402
 from app.webhook.router import router as webhook_router        # noqa: E402
 from app.feishu_bot.router import router as feishu_bot_router  # noqa: E402
 from app.routers.triggers import router as triggers_router     # noqa: E402
 from app.routers.dashboard import router as dashboard_router   # noqa: E402
 from app.routers.ai_manager import router as ai_manager_router  # noqa: E402
 
+app.include_router(auth_router)
 app.include_router(webhook_router)
 app.include_router(feishu_bot_router)
 app.include_router(triggers_router)

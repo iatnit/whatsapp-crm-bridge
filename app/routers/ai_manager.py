@@ -75,7 +75,7 @@ async def refresh_hubspot_contacts() -> list[dict]:
 _ai_manager_html: str | None = None
 
 
-@router.get("/ai-manager", response_class=HTMLResponse)
+@router.get("/ai-manager", response_class=HTMLResponse, dependencies=[Depends(verify_admin)])
 async def ai_manager_page():
     """Serve the AI Manager single-page UI."""
     global _ai_manager_html
