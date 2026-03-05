@@ -54,14 +54,22 @@ def _build_reminder_content(
     """Build Feishu rich-text content lines from action data."""
     lines: list[list[dict]] = []
 
+    _CRM_BASE = "https://wa-crm.zhangyun.xyz/customer/"
+
+    def _customer_line(name: str, phone: str, text: str) -> list[dict]:
+        """Build a line with clickable customer name linking to CRM detail page."""
+        return [
+            {"tag": "a", "text": f"  • {name}", "href": f"{_CRM_BASE}{phone}"},
+            {"tag": "text", "text": f": {text}"},
+        ]
+
     # Hot leads
     hot = [a for a in today_actions if a["priority"] == "high"]
     if hot:
         lines.append([{"tag": "text", "text": "🔥 热线索\n"}])
         for a in hot:
             name = a["customer_name"] or a["phone"]
-            text = f"  • {name}: {a['summary']}"
-            lines.append([{"tag": "text", "text": text}])
+            lines.append(_customer_line(name, a["phone"], a["summary"]))
             if a["today_action"]:
                 lines.append([{"tag": "text", "text": f"    → 今天: {a['today_action']}"}])
             if a["pending_customer"]:
@@ -80,7 +88,7 @@ def _build_reminder_content(
             if a["pending_customer"]:
                 parts.append(f"⏳{a['pending_customer']}")
             action_text = " | ".join(parts) if parts else a["summary"]
-            lines.append([{"tag": "text", "text": f"  • {name}: {action_text}"}])
+            lines.append(_customer_line(name, a["phone"], action_text))
         lines.append([{"tag": "text", "text": ""}])
 
     # Carry-over from yesterday
@@ -90,7 +98,7 @@ def _build_reminder_content(
         lines.append([{"tag": "text", "text": "📎 昨日延续\n"}])
         for a in carry_new:
             name = a["customer_name"] or a["phone"]
-            lines.append([{"tag": "text", "text": f"  • {name}: {a['tomorrow_action']}"}])
+            lines.append(_customer_line(name, a["phone"], a["tomorrow_action"]))
         lines.append([{"tag": "text", "text": ""}])
 
     # Stats
@@ -100,6 +108,7 @@ def _build_reminder_content(
     if hot_count:
         stat += f"，其中 {hot_count} 个热线索"
     lines.append([{"tag": "text", "text": stat}])
+    lines.append([{"tag": "a", "text": "📊 Open Dashboard", "href": "https://wa-crm.zhangyun.xyz/dashboard"}])
 
     return lines
 
@@ -274,6 +283,30 @@ async def send_sample_request_alert(customer_name: str, phone: str, analysis: di
         lines.append([{"tag": "text", "text": "建议动作: 确认样品规格，安排寄样"}])
 
     return await _send_feishu_webhook(f"📦 样品请求 — {customer_name or phone} ({now_str})", lines)
+
+
+async def send_stage_change_alert(
+    customer_name: str, phone: str,
+    old_stage: str, new_stage: str,
+) -> bool:
+    """Notify via Feishu when a customer's pipeline stage advances."""
+    if not settings.feishu_webhook_url:
+        return False
+    stage_labels = {
+        "new_lead": "New Lead", "contacted": "Contacted",
+        "qualified": "Qualified", "negotiating": "Negotiating",
+        "sampling": "Sampling", "ordered": "Ordered",
+        "repeat_buyer": "Repeat Buyer", "dormant": "Dormant", "lost": "Lost",
+    }
+    old_label = stage_labels.get(old_stage, old_stage or "unknown")
+    new_label = stage_labels.get(new_stage, new_stage)
+    lines = [
+        [{"tag": "text", "text": f"Customer: {customer_name or phone}"}],
+        [{"tag": "text", "text": f"Stage: {old_label} -> {new_label}"}],
+        [{"tag": "text", "text": f"Phone: {phone}"}],
+        [{"tag": "a", "text": "View Details", "href": f"https://wa-crm.zhangyun.xyz/customer/{phone}"}],
+    ]
+    return await _send_feishu_webhook(f"Stage Change: {customer_name or phone}", lines)
 
 
 async def send_pipeline_error_alert(errors: list[str], analyzed: int) -> bool:

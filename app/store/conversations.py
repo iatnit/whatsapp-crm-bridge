@@ -121,6 +121,25 @@ async def update_crm_enrichment(
             await db.commit()
 
 
+async def update_customer_stage(phone: str, new_stage: str) -> str:
+    """Update customer_stage and return the old stage (for change detection)."""
+    if not new_stage:
+        return ""
+    async with get_db() as db:
+        cursor = await db.execute(
+            "SELECT customer_stage FROM conversations WHERE phone = ?", (phone,)
+        )
+        row = await cursor.fetchone()
+        old_stage = (row["customer_stage"] or "") if row else ""
+        if old_stage != new_stage:
+            await db.execute(
+                "UPDATE conversations SET customer_stage = ? WHERE phone = ?",
+                (new_stage, phone),
+            )
+            await db.commit()
+        return old_stage
+
+
 async def get_sync_status() -> dict:
     """Get cross-system CRM sync status for all conversations.
 

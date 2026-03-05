@@ -17,6 +17,8 @@ h3{font-size:1rem;color:#475569;margin-bottom:12px}
 table{width:100%;border-collapse:collapse;font-size:.875rem}
 th{text-align:left;padding:8px 10px;border-bottom:2px solid #e2e8f0;color:#64748b;font-weight:600}
 td{padding:8px 10px;border-bottom:1px solid #f1f5f9}
+tr.clickable{cursor:pointer}
+tr.clickable:hover td{background:#eff6ff}
 tr:hover td{background:#f8fafc}
 .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.75rem;font-weight:700}
 .S{background:#fef2f2;color:#dc2626}.A{background:#fffbeb;color:#d97706}
@@ -27,6 +29,20 @@ tr:hover td{background:#f8fafc}
 .nav a{color:#94a3b8;text-decoration:none;font-size:14px;font-weight:500;padding:6px 12px;border-radius:6px;transition:all .15s}
 .nav a:hover{color:#fff;background:rgba(255,255,255,.1)}
 .nav a.active{color:#fff;background:#2563eb}
+.search-box{display:flex;gap:8px;margin-bottom:20px}
+.search-box input{flex:1;padding:10px 16px;border:1px solid #d1d7db;border-radius:8px;font-size:14px;outline:none}
+.search-box input:focus{border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+.search-box button{padding:10px 20px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer}
+.search-box button:hover{background:#1d4ed8}
+.search-results{background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.08);margin-bottom:20px;display:none}
+.search-results h3{margin-bottom:12px}
+.sr-item{padding:10px 12px;border-bottom:1px solid #f1f5f9;cursor:pointer;display:flex;gap:12px;align-items:center}
+.sr-item:hover{background:#f8fafc}
+.sr-name{font-weight:500;min-width:120px}
+.sr-content{color:#64748b;font-size:.85rem;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sr-dir{font-size:.7rem;padding:2px 6px;border-radius:4px;font-weight:600}
+.sr-dir.inbound{background:#e2e8f0;color:#475569}
+.sr-dir.outbound{background:#dbeafe;color:#2563eb}
 @media(max-width:768px){.kpis,.grid{grid-template-columns:1fr}}
 </style></head><body>
 <nav class="nav">
@@ -35,15 +51,25 @@ tr:hover td{background:#f8fafc}
   <a href="/logout" style="margin-left:auto">Logout</a>
 </nav>
 <h1 style="margin-top:20px">LOCACRYSTAL CRM</h1>
+
+<div class="search-box">
+  <input type="text" id="searchInput" placeholder="Search messages or customers..." onkeydown="if(event.key==='Enter')doSearch()">
+  <button onclick="doSearch()">Search</button>
+</div>
+<div class="search-results" id="searchResults">
+  <h3>Search Results <span id="searchCount" style="color:#94a3b8;font-weight:400"></span></h3>
+  <div id="searchList"></div>
+</div>
+
 <div class="kpis" id="kpis"></div>
 <div class="grid">
   <div class="card"><h3>Tier</h3><canvas id="tierChart"></canvas></div>
-  <div class="card"><h3></h3><canvas id="prioChart"></canvas></div>
+  <div class="card"><h3>Priority</h3><canvas id="prioChart"></canvas></div>
   <div class="card" style="grid-column:span 2"><canvas id="msgChart"></canvas></div>
   <div class="card" style="grid-column:span 2">
     <h3>Top 30</h3>
     <div style="max-height:520px;overflow-y:auto">
-    <table><thead><tr><th>#</th><th></th><th>5</th><th>Tier</th><th></th><th></th><th></th></tr></thead>
+    <table><thead><tr><th>#</th><th>Name</th><th>Phone</th><th>Tier</th><th>City</th><th>Msgs</th><th>Last</th></tr></thead>
     <tbody id="topTb"></tbody></table>
     </div>
   </div>
@@ -52,13 +78,53 @@ tr:hover td{background:#f8fafc}
 <script>
 const TIER_COLORS={'S':'#dc2626','A':'#d97706','B':'#2563eb','C':'#94a3b8','D':'#cbd5e1','未设置':'#e2e8f0'};
 const PRIO_COLORS={'high':'#ef4444','medium':'#f59e0b','normal':'#22c55e','low':'#22c55e'};
-const PRIO_LABEL={'high':'高优先','medium':'中优先','normal':'普通','low':'低优先'};
+const PRIO_LABEL={'high':'High','medium':'Medium','normal':'Normal','low':'Low'};
+
+function goCustomer(phone){location.href='/customer/'+encodeURIComponent(phone)}
+
+async function doSearch(){
+  const q=document.getElementById('searchInput').value.trim();
+  if(!q){document.getElementById('searchResults').style.display='none';return}
+  const d=await fetch('/api/v1/dashboard/search?q='+encodeURIComponent(q)).then(r=>r.json());
+  const box=document.getElementById('searchResults');
+  const list=document.getElementById('searchList');
+  document.getElementById('searchCount').textContent=`(${d.results.length})`;
+  if(!d.results.length){list.innerHTML='<div style="color:#94a3b8;padding:12px">No results</div>';box.style.display='block';return}
+  list.innerHTML=d.results.map(r=>{
+    if(r.match_type==='customer'){
+      const tier=r.customer_tier?`<span class="badge ${r.customer_tier}">${r.customer_tier}</span>`:'';
+      return `<div class="sr-item" onclick="goCustomer('${r.phone}')">
+        <span class="sr-name">${r.customer_name||r.display_name||r.phone}</span>
+        ${tier}
+        <span class="sr-content">${r.total_messages} msgs | ${r.location||''}</span>
+      </div>`;
+    }
+    const name=r.customer_name||r.display_name||r.phone;
+    const ts=new Date(r.timestamp*1000).toLocaleDateString('zh-CN');
+    return `<div class="sr-item" onclick="goCustomer('${r.phone}')">
+      <span class="sr-dir ${r.direction}">${r.direction==='inbound'?'IN':'OUT'}</span>
+      <span class="sr-name">${name}</span>
+      <span class="sr-content">${r.content}</span>
+      <span style="color:#94a3b8;font-size:.75rem;white-space:nowrap">${ts}</span>
+    </div>`;
+  }).join('');
+  box.style.display='block';
+}
+
 async function load(){
   const d=await fetch('/api/v1/dashboard/data').then(r=>r.json());
+
+  // KPIs — 2 rows of 4
+  const totalIn=d.msg_7d.reduce((s,m)=>s+m.inbound,0);
+  const totalOut=d.msg_7d.reduce((s,m)=>s+m.outbound,0);
+  const replyRate=totalIn>0?Math.round(totalOut/totalIn*100):0;
   document.getElementById('kpis').innerHTML=[
-    {n:d.total_customers,l:'总客户'},{n:d.active_7d,l:'7天活跃'},
-    {n:d.hot_leads,l:'今日热线索'},{n:d.new_7d,l:'本周新增'}
+    {n:d.total_customers,l:'Total Customers'},{n:d.active_7d,l:'Active (7d)'},
+    {n:d.hot_leads,l:'Hot Leads Today'},{n:d.new_7d,l:'New This Week'},
+    {n:totalIn,l:'Inbound (7d)'},{n:totalOut,l:'Outbound (7d)'},
+    {n:replyRate+'%',l:'Reply Rate (7d)'},{n:d.msg_7d.length?Math.round((totalIn+totalOut)/d.msg_7d.length):0,l:'Avg/Day'}
   ].map(k=>`<div class="kpi"><div class="n">${k.n}</div><div class="l">${k.l}</div></div>`).join('');
+
   new Chart(document.getElementById('tierChart'),{type:'doughnut',data:{
     labels:d.tiers.map(t=>t.tier),
     datasets:[{data:d.tiers.map(t=>t.count),backgroundColor:d.tiers.map(t=>TIER_COLORS[t.tier]||'#e2e8f0'),borderWidth:2}]
@@ -70,15 +136,17 @@ async function load(){
   new Chart(document.getElementById('msgChart'),{type:'line',data:{
     labels:d.msg_7d.map(m=>m.date),
     datasets:[
-      {label:'收到消息',data:d.msg_7d.map(m=>m.inbound),borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,.1)',fill:true,tension:.3},
-      {label:'发送消息',data:d.msg_7d.map(m=>m.outbound),borderColor:'#10b981',backgroundColor:'rgba(16,185,129,.1)',fill:true,tension:.3}
+      {label:'Inbound',data:d.msg_7d.map(m=>m.inbound),borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,.1)',fill:true,tension:.3},
+      {label:'Outbound',data:d.msg_7d.map(m=>m.outbound),borderColor:'#10b981',backgroundColor:'rgba(16,185,129,.1)',fill:true,tension:.3}
     ]
-  },options:{plugins:{title:{display:true,text:'7天消息量趋势'}},scales:{y:{beginAtZero:true}}}});
+  },options:{plugins:{title:{display:true,text:'7-Day Message Volume'}},scales:{y:{beginAtZero:true}}}});
+
+  // Top 30 — clickable rows
   document.getElementById('topTb').innerHTML=d.top_customers.map((c,i)=>{
     const badge=c.tier?`<span class="badge ${c.tier}">${c.tier}</span>`:'<span style="color:#cbd5e1">-</span>';
-    return `<tr><td style="color:#94a3b8">${i+1}</td><td>${c.name}</td><td style="font-family:monospace;color:#64748b">${c.phone_short}</td><td>${badge}</td><td>${c.city||'-'}</td><td>${c.msgs}</td><td>${c.last_contact||'-'}</td></tr>`;
+    return `<tr class="clickable" onclick="goCustomer('${c.phone}')"><td style="color:#94a3b8">${i+1}</td><td>${c.name}</td><td style="font-family:monospace;color:#64748b">${c.phone_short}</td><td>${badge}</td><td>${c.city||'-'}</td><td>${c.msgs}</td><td>${c.last_contact||'-'}</td></tr>`;
   }).join('');
-  document.getElementById('ts').textContent='更新时间: '+new Date().toLocaleString('zh-CN');
+  document.getElementById('ts').textContent='Updated: '+new Date().toLocaleString('zh-CN');
 }
 load();
 </script></body></html>

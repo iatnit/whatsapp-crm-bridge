@@ -378,6 +378,14 @@ async def run_daily_pipeline() -> dict:
                     hs_contact_id = await hubspot_ensure_contact(
                         phone, name=feishu_name, country=location, extra=hs_extra)
                     if hs_contact_id:
+                        # Detect stage change via persistent local cache
+                        new_stage = hs_extra.get("customer_stage", "")
+                        if new_stage:
+                            from app.store.conversations import update_customer_stage
+                            old_stage = await update_customer_stage(phone, new_stage)
+                            if old_stage and old_stage != new_stage:
+                                from app.notifier.daily_reminder import send_stage_change_alert
+                                safe_task(send_stage_change_alert(feishu_name, phone, old_stage, new_stage), name=f"stage-alert-{phone}")
                         await update_hubspot_id(phone, hs_contact_id)
                         # Cache HubSpot enrichment locally for AI auto-reply context
                         from app.store.conversations import update_crm_enrichment

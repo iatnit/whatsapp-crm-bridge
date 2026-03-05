@@ -95,6 +95,10 @@ MIGRATIONS = [
     """
     ALTER TABLE conversations ADD COLUMN location TEXT DEFAULT '';
     """,
+    # Cache HubSpot customer_stage for stage-change detection
+    """
+    ALTER TABLE conversations ADD COLUMN customer_stage TEXT DEFAULT '';
+    """,
     # P1a: Customer actions table for daily reminders
     """
     CREATE TABLE IF NOT EXISTS customer_actions (

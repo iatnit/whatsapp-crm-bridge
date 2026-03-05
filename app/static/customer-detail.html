@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="zh"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Customer Detail — LOCACRYSTAL CRM</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f1f5f9;color:#1e293b}
+.nav{background:#0f172a;padding:10px 24px;display:flex;gap:16px;align-items:center}
+.nav a{color:#94a3b8;text-decoration:none;font-size:14px;font-weight:500;padding:6px 12px;border-radius:6px;transition:all .15s}
+.nav a:hover{color:#fff;background:rgba(255,255,255,.1)}
+.nav a.active{color:#fff;background:#2563eb}
+.container{max-width:960px;margin:0 auto;padding:24px}
+.profile{background:#fff;border-radius:12px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,.08);margin-bottom:20px}
+.profile h1{font-size:1.4rem;color:#0f172a;margin-bottom:12px}
+.profile-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 24px}
+.profile-item{font-size:.875rem;color:#64748b}
+.profile-item span{color:#1e293b;font-weight:500}
+.badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.75rem;font-weight:700}
+.S{background:#fef2f2;color:#dc2626}.A{background:#fffbeb;color:#d97706}
+.B{background:#eff6ff;color:#2563eb}.C{background:#f1f5f9;color:#475569}
+.D{background:#f8fafc;color:#94a3b8}
+.chat{background:#fff;border-radius:12px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.chat h2{font-size:1.1rem;color:#0f172a;margin-bottom:16px}
+.chat-list{max-height:600px;overflow-y:auto;display:flex;flex-direction:column;gap:6px}
+.msg{max-width:75%;padding:10px 14px;border-radius:12px;font-size:.875rem;line-height:1.4;word-break:break-word}
+.msg.inbound{background:#e2e8f0;align-self:flex-start;border-bottom-left-radius:4px}
+.msg.outbound{background:#2563eb;color:#fff;align-self:flex-end;border-bottom-right-radius:4px}
+.msg .meta{font-size:.7rem;margin-top:4px;opacity:.6}
+.msg.outbound .meta{color:rgba(255,255,255,.7)}
+.msg .media-tag{font-style:italic;opacity:.7}
+.day-sep{text-align:center;font-size:.75rem;color:#94a3b8;padding:8px 0}
+.loading{text-align:center;color:#94a3b8;padding:40px}
+@media(max-width:768px){.profile-grid{grid-template-columns:1fr}.msg{max-width:90%}}
+</style></head><body>
+<nav class="nav">
+  <a href="/dashboard">Dashboard</a>
+  <a href="/ai-manager">AI Manager</a>
+  <a href="/logout" style="margin-left:auto">Logout</a>
+</nav>
+<div class="container">
+  <div class="profile" id="profile"><div class="loading">Loading...</div></div>
+  <div class="chat">
+    <h2>Message History</h2>
+    <div class="chat-list" id="chatList"><div class="loading">Loading...</div></div>
+  </div>
+</div>
+<script>
+const phone = location.pathname.split('/').pop();
+function fmtTime(ts){
+  const d = new Date(ts*1000);
+  return d.toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+}
+function fmtDate(ts){
+  return new Date(ts*1000).toLocaleDateString('zh-CN',{year:'numeric',month:'2-digit',day:'2-digit'});
+}
+async function load(){
+  const d = await fetch('/api/v1/customer/'+encodeURIComponent(phone)).then(r=>r.json());
+  const p = d.profile;
+  const tier = p.customer_tier;
+  const tierBadge = tier ? `<span class="badge ${tier}">${tier}</span>` : '<span style="color:#cbd5e1">-</span>';
+
+  document.getElementById('profile').innerHTML = `
+    <h1>${p.customer_name || p.display_name || p.phone} ${tierBadge}</h1>
+    <div class="profile-grid">
+      <div class="profile-item">Phone: <span>${p.phone}</span></div>
+      <div class="profile-item">Display Name: <span>${p.display_name||'-'}</span></div>
+      <div class="profile-item">Location: <span>${p.location||'-'}</span></div>
+      <div class="profile-item">Size: <span>${p.customer_size||'-'}</span></div>
+      <div class="profile-item">Match: <span>${p.match_status||'-'}</span></div>
+      <div class="profile-item">Messages: <span>${p.total_messages||0}</span></div>
+      <div class="profile-item">First Contact: <span>${p.first_message_at ? p.first_message_at.substring(0,10) : '-'}</span></div>
+      <div class="profile-item">Last Contact: <span>${p.last_message_at ? p.last_message_at.substring(0,10) : '-'}</span></div>
+      <div class="profile-item">Priority: <span>${p.intent_priority||'-'}</span></div>
+      <div class="profile-item">Product Interest: <span>${p.product_interest||'-'}</span></div>
+      <div class="profile-item">Tags: <span>${p.intent_tags||'-'}</span></div>
+      <div class="profile-item">AI Reply: <span>${p.ai_disabled ? 'Disabled' : 'Enabled'}</span></div>
+    </div>`;
+
+  const msgs = d.messages;
+  if(!msgs.length){
+    document.getElementById('chatList').innerHTML='<div class="loading">No messages</div>';
+    return;
+  }
+  let html='';
+  let lastDate='';
+  for(const m of msgs){
+    const date = fmtDate(m.timestamp);
+    if(date!==lastDate){
+      html+=`<div class="day-sep">${date}</div>`;
+      lastDate=date;
+    }
+    let content = m.content||'';
+    if(m.msg_type!=='text'){
+      content = content ? `<span class="media-tag">[${m.msg_type}]</span> ${content}` : `<span class="media-tag">[${m.msg_type}]</span>`;
+    }
+    html+=`<div class="msg ${m.direction}">
+      ${content}
+      <div class="meta">${fmtTime(m.timestamp)}</div>
+    </div>`;
+  }
+  document.getElementById('chatList').innerHTML=html;
+  // Scroll to bottom
+  const cl=document.getElementById('chatList');
+  cl.scrollTop=cl.scrollHeight;
+}
+load();
+</script></body></html>

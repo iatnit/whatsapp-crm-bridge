@@ -148,6 +148,14 @@ async def lifespan(app: FastAPI):
         )
         logger.info("CEO weekly report enabled: Monday 09:00 CST")
 
+    # Daily SQLite backup (3am CST)
+    from app.backup import run_backup
+    scheduler.add_job(
+        run_backup, "cron", hour=3, minute=0,
+        timezone="Asia/Shanghai", id="daily_backup",
+    )
+    logger.info("Daily backup enabled: 03:00 CST (retain 7 days)")
+
     # Feishu customer sync
     if settings.feishu_app_token and settings.feishu_table_customers:
         from app.matcher.customer_matcher import sync_from_feishu
