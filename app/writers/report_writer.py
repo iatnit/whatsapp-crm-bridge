@@ -141,14 +141,53 @@ def generate_daily_report(
     return report
 
 
+async def _find_ceo_report_record(date_str: str) -> str | None:
+    """Find existing CEO日报 record_id for the given date using date range filter.
+
+    Uses Feishu's date field filter (ExactDate) to reliably match today's record,
+    avoiding the text-contains mismatch that occurs with millisecond timestamp fields.
+    """
+    from app.writers.feishu_writer import BASE_URL, _headers, _get_http
+
+    cst = timezone(timedelta(hours=8))
+    midnight = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=cst)
+    midnight_ms = int(midnight.timestamp() * 1000)
+
+    url = f"{BASE_URL}/bitable/v1/apps/{_CEO_APP_TOKEN}/tables/{_CEO_TABLE_ID}/records/search"
+    payload = {
+        "filter": {
+            "conjunction": "and",
+            "conditions": [{
+                "field_name": "日期",
+                "operator": "is",
+                "value": ["ExactDate", str(midnight_ms)],
+            }],
+        },
+        "automatic_fields": True,
+    }
+
+    client = _get_http()
+    try:
+        resp = await client.post(url, json=payload, headers=await _headers())
+        data = resp.json()
+        if data.get("code") != 0:
+            logger.debug("CEO日报 date search failed: %s", data.get("msg"))
+            return None
+        items = data.get("data", {}).get("items", [])
+        return items[0].get("record_id") if items else None
+    except Exception as e:
+        logger.error("CEO日报 date search error: %s", e)
+        return None
+
+
 async def write_report_to_feishu(report: str, summary: dict) -> str | None:
     """Write daily report to Feishu CEO日报 Base.
 
-    Upserts by date: if today's record exists, update; otherwise create.
-    Uses shared feishu_writer helpers for auto token-retry.
+    Upserts by date: if today's record exists, update it; otherwise create new.
+    Uses date range filter (not text search) to reliably find existing records.
     Returns record_id or None.
     """
-    from app.writers.feishu_writer import _search_records, _create_record, _update_record
+    from app.writers.feishu_writer import _create_record, _update_record
 
     cst = timezone(timedelta(hours=8))
     today = datetime.now(cst)
@@ -181,12 +220,8 @@ async def write_report_to_feishu(report: str, summary: dict) -> str | None:
         fields["今日日报全文"] = report + f"\n\n## 异常详情\n{error_text}"
 
     try:
-        # Search for existing record by date
-        items = await _search_records(
-            _CEO_TABLE_ID, "日期", date_str, app_token=_CEO_APP_TOKEN,
-        )
-        if items:
-            existing_id = items[0].get("record_id")
+        existing_id = await _find_ceo_report_record(date_str)
+        if existing_id:
             result = await _update_record(
                 _CEO_TABLE_ID, existing_id, fields, app_token=_CEO_APP_TOKEN,
             )
